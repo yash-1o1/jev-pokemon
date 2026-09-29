@@ -26,7 +26,15 @@ There is no universal game-state decoder. Raw memory reads can work across suppo
 
 ## Development memory probe
 
-Install Node.js 20 or newer, then run `npm ci` and `npm run typecheck`. Use the memory probe for development or testing outside an achievement-earning run. Start RetroArch with a core and your own game. Enable Network Commands (`network_cmd_enable = "true"`) on UDP port 55355, preferably bound to `127.0.0.1`.
+Install Node.js 20 or newer, then run `npm ci` and `npm run typecheck`. Use the memory probe for development or testing outside an achievement-earning run. Enable Network Commands (`network_cmd_enable = "true"`) in RetroArch on UDP port 55355, preferably bound to `127.0.0.1`.
+
+To start your own RetroArch installation and game, pass the executable, a libretro core, and ROM paths together:
+
+```powershell
+npm run probe -- --retroarch 'C:\RetroArch\retroarch.exe' --core 'C:\RetroArch\cores\mgba_libretro.dll' --rom 'C:\Games\Emerald.gba'
+```
+
+Paths with spaces are supported. The probe launches RetroArch with `-L CORE ROM` and waits for its network command interface. You can also start the game yourself and omit all three launch paths. This project does not copy the ROM or core into the repository. A standalone mGBA executable is not a libretro core and cannot be used with this launch mode. RetroAchievements is configured within RetroArch; its web API key is only needed for the separate achievement lookup command below.
 
 Check status and read raw bytes from a core memory address:
 
@@ -61,6 +69,6 @@ The probe sends only `GET_STATUS` and `READ_CORE_MEMORY`. RetroArch documents me
 
 RetroAchievements [prohibits bots and complex scripts from gaining achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html). A future autonomous player must not be presented as a compliant achievement run. A human-operated advisor can use achievement information without automating gameplay.
 
-Sources: [RetroArch network commands](https://docs.libretro.com/development/retroarch/network-control-interface/), [pokeemerald SaveBlock1](https://github.com/pret/pokeemerald/blob/master/include/global.h), [official achievement API](https://api-docs.retroachievements.org/v1/get-game-info-and-user-progress.html).
+Sources: [RetroArch command line](https://docs.libretro.com/guides/cli-intro/), [RetroArch network commands](https://docs.libretro.com/development/retroarch/network-control-interface/), [pokeemerald SaveBlock1](https://github.com/pret/pokeemerald/blob/master/include/global.h), [official achievement API](https://api-docs.retroachievements.org/v1/get-game-info-and-user-progress.html).
 
 This repository is a fork of `christianmat/jev-pokemon`. Licensed under GPL-2.0-or-later; see [LICENSE](LICENSE).
