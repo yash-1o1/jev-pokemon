@@ -8,7 +8,8 @@
     "start": "tsx src/server/main.ts",
     "headless": "tsx src/server/main.ts --headless",
     "resume": "tsx src/server/main.ts --resume",
-    "typecheck": "tsc"
+    "typecheck": "tsc",
+    "emerald:probe": "tsx scripts/emerald-probe.ts"
   },
   "keywords": [],
   "author": "Christian Mathiesen",
