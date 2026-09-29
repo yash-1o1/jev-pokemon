@@ -1,12 +1,12 @@
 {
-  "name": "jev-pokemon-emerald",
+  "name": "jev-game-harness",
   "version": "0.1.0",
-  "description": "Read-only Pokémon Emerald observer for RetroArch and RetroAchievements",
+  "description": "Read-only RetroArch game probe, starting with Pokémon Emerald",
   "type": "module",
   "private": true,
   "license": "GPL-2.0-or-later",
   "scripts": {
-    "probe": "tsx scripts/emerald-probe.ts",
+    "probe": "tsx scripts/probe.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {

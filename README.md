@@ -1,41 +1,64 @@
-# Pokémon Emerald observer
+# Game harness starter
 
-A small, read-only starting point for a Pokémon Emerald project. It connects to **your** RetroArch installation running the mGBA core and **your** Emerald ROM. It does not bundle an emulator or ROM.
+A small starting point for observing games in your own RetroArch installation. Pokémon Emerald is the first game-specific decoder. The project does not include an emulator, ROM, or Jev integration.
 
-The current command can:
+## How the pieces fit
 
-- Check whether RetroArch is running content.
-- Read the player's map group, map number, and X/Y through RetroArch's memory read command.
-- Fetch your locked Hardcore achievements from the official RetroAchievements web API.
-
-It cannot yet verify Hardcore activity, press game buttons, save the game, or run Jev. In particular, it is not an autonomous achievement player. [RetroAchievements prohibits bots and complex scripts from earning achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html).
-
-## Setup
-
-1. Install Node.js 20 or newer and run `npm ci`.
-2. Start your RetroArch with the mGBA core and your own supported Pokémon Emerald ROM. Configure your RetroAchievements account in RetroArch if you want achievements.
-3. Enable RetroArch Network Commands on its default UDP port 55355. Bind it to `127.0.0.1` if possible.
-4. Supply the `gSaveBlock1Ptr` address for **your exact ROM build**, preferably via a matching `pokeemerald.sym` file. An address from another build may decode the wrong memory.
-
-```powershell
-npm run probe -- --symbol-file 'C:\path\to\pokeemerald.sym'
+```text
+RetroArch + core + your game
+          │
+          ▼
+platform adapter (status, raw memory)
+          │
+          ├── raw probe for any core exposing a memory map
+          └── game adapter (Emerald position today)
+                       │
+                       ▼
+              structured observations
+                       │
+                       ▼
+          future action choices and Jev client
 ```
 
-To also fetch your achievement list, set your [RetroAchievements web API key](https://api-docs.retroachievements.org/getting-started.html) in the local environment. Do not commit the key.
+The [original Pokémon Red project](https://github.com/christianmat/jev-pokemon) used the `serverboy` Game Boy emulator directly in Node. Its harness advanced frames, read memory, generated legal choices, sent those choices to Jev, and executed the selected choice as button presses. It was not a desktop computer-use system. A [Balatro Jev project](https://github.com/IgorWarzocha/jev-plays-balatro) uses the same basic pattern with a game mod that provides state and actions.
+
+There is no universal game-state decoder. Raw memory reads can work across supported cores, but every game's map, menus, rules, and legal actions need a game adapter. A later visual adapter could use screenshots for games without useful memory structures. Jev would receive structured observations and bounded action choices from those adapters. Controller input, decision calls, and action execution are **not yet implemented**.
+
+## Run the probe
+
+Install Node.js 20 or newer, then run `npm ci` and `npm run typecheck`. Start RetroArch with a core and your own game. Enable Network Commands (`network_cmd_enable = "true"`) on UDP port 55355, preferably bound to `127.0.0.1`.
+
+Check status and read raw bytes from a core memory address:
+
+```powershell
+npm run probe -- --read 0x02000000:16
+```
+
+You can repeat `--read`. The address is hexadecimal with `0x` or decimal without it; length is decimal and limited to 256 bytes per read. The core must expose a compatible memory map.
+
+For Pokémon Emerald, provide the `gSaveBlock1Ptr` address for the **exact ROM build**, preferably from a matching `pokeemerald.sym`:
+
+```powershell
+npm run probe -- --game emerald --symbol-file 'C:\path\to\pokeemerald.sym'
+```
+
+You can instead supply `--save-block-pointer-address 0x...` if its value has been verified for your build. The Emerald adapter reads map group, map number, and player X/Y. Another game's decoder would live beside `src/emerald/state.ts` and consume the same `MemoryReader` interface.
+
+Optional RetroAchievements progress uses the official web API. Set your key locally; never commit it. The game ID must match the ROM recognized by RetroAchievements.
 
 ```powershell
 $env:RA_WEB_API_KEY = '<your key>'
-npm run probe -- --symbol-file 'C:\path\to\pokeemerald.sym' --game-id <game-id> --username <username>
+npm run probe -- --game-id <game-id> --username <username>
 ```
 
-The ROM must be recognized by RetroAchievements; confirm its hash in RetroArch. The API game ID and symbol address must correspond to that ROM. You can omit the symbol option to check RetroArch status and fetch achievements, or omit API options to check status and position.
+Achievement lookup can be combined with raw reads or Emerald decoding. The API may lag behind an unlock. Confirm the game's RetroAchievements hash inside RetroArch.
 
-Run `npm run typecheck` to check the complete project. No generated Pokémon Red data is needed.
+## Current limits
 
-## Limits
+The probe sends only `GET_STATUS` and `READ_CORE_MEMORY`. We have not yet run it against a live RetroArch/mGBA session or verified that read-only observation leaves Hardcore active. The network interface does not report whether Hardcore is active; inspect RetroArch itself. No controller input or save-state recovery is present.
 
-The probe uses only `GET_STATUS` and `READ_CORE_MEMORY`. RetroArch documents these as read commands, but we have not verified on a live RetroArch/mGBA session that observation leaves Hardcore active. The web API may lag behind an unlock. RetroArch does not expose a Hardcore-active status through this command interface, so confirm it in RetroArch itself. No emulator save states are used; any future gameplay recovery must use Emerald's in-game save and a fresh boot followed by Continue.
+RetroAchievements [prohibits bots and complex scripts from gaining achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html). A future autonomous player must not be presented as a compliant achievement run. A human-operated advisor can use achievement information without automating gameplay.
 
 Sources: [RetroArch network commands](https://docs.libretro.com/development/retroarch/network-control-interface/), [pokeemerald SaveBlock1](https://github.com/pret/pokeemerald/blob/master/include/global.h), [official achievement API](https://api-docs.retroachievements.org/v1/get-game-info-and-user-progress.html).
 
-This repository is a fork of [christianmat/jev-pokemon](https://github.com/christianmat/jev-pokemon). Licensed under GPL-2.0-or-later; see [LICENSE](LICENSE).
+This repository is a fork of `christianmat/jev-pokemon`. Licensed under GPL-2.0-or-later; see [LICENSE](LICENSE).

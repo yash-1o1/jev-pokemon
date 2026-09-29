@@ -1,4 +1,4 @@
-import type { RetroArchObserver } from './retroarch.js';
+import type { MemoryReader } from '../platform/types.js';
 
 export interface EmeraldPosition {
   saveBlockAddress: string;
@@ -12,7 +12,7 @@ export interface EmeraldPosition {
  * pokeemerald SaveBlock1: pos at +0x00, location map group/number at +0x04.
  * The pointer itself moves, so resolve it from a symbol for the exact ROM build.
  */
-export async function readEmeraldPosition(observer: RetroArchObserver, saveBlock1PointerAddress: number): Promise<EmeraldPosition> {
+export async function readEmeraldPosition(observer: MemoryReader, saveBlock1PointerAddress: number): Promise<EmeraldPosition> {
   const pointerBytes = await observer.readMemory(saveBlock1PointerAddress, 4);
   const address = pointerBytes.readUInt32LE(0);
   if (address < 0x02000000 || address > 0x0203fff7)
