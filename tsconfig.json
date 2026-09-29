@@ -8,5 +8,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src", "scripts/probe.ts"]
+  "include": ["src", "scripts"]
 }

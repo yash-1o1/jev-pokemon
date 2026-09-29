@@ -24,9 +24,9 @@ The [original Pokémon Red project](https://github.com/christianmat/jev-pokemon)
 
 There is no universal game-state decoder. Raw memory reads can work across supported cores, but every game's map, menus, rules, and legal actions need a game adapter. A later visual adapter could use screenshots for games without useful memory structures. Jev would receive structured observations and bounded action choices from those adapters. Controller input, decision calls, and action execution are **not yet implemented**.
 
-## Run the probe
+## Development memory probe
 
-Install Node.js 20 or newer, then run `npm ci` and `npm run typecheck`. Start RetroArch with a core and your own game. Enable Network Commands (`network_cmd_enable = "true"`) on UDP port 55355, preferably bound to `127.0.0.1`.
+Install Node.js 20 or newer, then run `npm ci` and `npm run typecheck`. Use the memory probe for development or testing outside an achievement-earning run. Start RetroArch with a core and your own game. Enable Network Commands (`network_cmd_enable = "true"`) on UDP port 55355, preferably bound to `127.0.0.1`.
 
 Check status and read raw bytes from a core memory address:
 
@@ -44,18 +44,20 @@ npm run probe -- --game emerald --symbol-file 'C:\path\to\pokeemerald.sym'
 
 You can instead supply `--save-block-pointer-address 0x...` if its value has been verified for your build. The Emerald adapter reads map group, map number, and player X/Y. Another game's decoder would live beside `src/emerald/state.ts` and consume the same `MemoryReader` interface.
 
-Optional RetroAchievements progress uses the official web API. Set your key locally; never commit it. The game ID must match the ROM recognized by RetroAchievements.
+## Achievement lookup
+
+The official RetroAchievements web API can list your progress without connecting to RetroArch or reading emulator memory. Set your key locally; never commit it. The game ID must match your game.
 
 ```powershell
 $env:RA_WEB_API_KEY = '<your key>'
-npm run probe -- --game-id <game-id> --username <username>
+npm run achievements -- --game-id <game-id> --username <username>
 ```
 
-Achievement lookup can be combined with raw reads or Emerald decoding. The API may lag behind an unlock. Confirm the game's RetroAchievements hash inside RetroArch.
+The API may lag behind an unlock. The achievement lookup and memory probe are separate commands. Do not combine memory probing and automated play to earn RetroAchievements.
 
 ## Current limits
 
-The probe sends only `GET_STATUS` and `READ_CORE_MEMORY`. We have not yet run it against a live RetroArch/mGBA session or verified that read-only observation leaves Hardcore active. The network interface does not report whether Hardcore is active; inspect RetroArch itself. No controller input or save-state recovery is present.
+The probe sends only `GET_STATUS` and `READ_CORE_MEMORY`. RetroArch documents memory reads, but we have not verified on a live session whether they leave the Hardcore indicator active. Even if it stays active, that would **not** establish RetroAchievements permission to use a memory-driven bot. The network interface does not report whether Hardcore is active. No controller input or save-state recovery is present.
 
 RetroAchievements [prohibits bots and complex scripts from gaining achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html). A future autonomous player must not be presented as a compliant achievement run. A human-operated advisor can use achievement information without automating gameplay.
 

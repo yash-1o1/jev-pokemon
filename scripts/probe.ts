@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { readEmeraldPosition } from '../src/emerald/state.js';
-import { getAchievementProgress } from '../src/integrations/retroachievements.js';
 
 function option(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -29,9 +28,12 @@ function emeraldPointerAddress(): number {
 
 async function main() {
   if (process.argv.includes('--help')) {
-    console.log('Usage: npm run probe -- [--read 0x02000000:16] [--game emerald --symbol-file FILE] [--game-id ID --username NAME]');
+    console.log('Development only: npm run probe -- [--read 0x02000000:16] [--game emerald --symbol-file FILE]');
     return;
   }
+
+  if (process.argv.includes('--game-id') || process.argv.includes('--username'))
+    throw new Error('Achievement lookup is separate. Use npm run achievements.');
 
   const game = option('--game');
   if (game && game !== 'emerald') throw new Error(`No decoder for game: ${game}`);
@@ -53,15 +55,7 @@ async function main() {
     console.log(JSON.stringify({ emerald: await readEmeraldPosition(observer, emeraldPointerAddress()) }, null, 2));
   }
 
-  const gameId = option('--game-id');
-  const username = option('--username');
-  if (gameId || username) {
-    if (!gameId || !username || !process.env.RA_WEB_API_KEY)
-      throw new Error('Achievement lookup needs --game-id, --username, and RA_WEB_API_KEY');
-    const progress = await getAchievementProgress(Number(gameId), username, process.env.RA_WEB_API_KEY);
-    console.log(JSON.stringify(progress, null, 2));
-  }
-  console.log('Hardcore-active status is not exposed by this interface; verify it in RetroArch.');
+  console.log('Development probe only. Do not use it to drive a RetroAchievements achievement run.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; });
