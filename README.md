@@ -47,7 +47,7 @@ This machine's `config.local.json` is set to Wingosy's managed RetroArch, mGBA c
 
 ## Development memory probe
 
-Use the memory probe for development or testing outside an achievement-earning run. Enable Network Commands (`network_cmd_enable = "true"`) in RetroArch on UDP port 55355, preferably bound to `127.0.0.1`. Wingosy's current `retroarch.cfg` has this setting disabled, so it must be enabled before the probe can connect. With `config.local.json` filled in, run:
+Use the memory probe for development or testing outside an achievement-earning run. Enable Network Commands (`network_cmd_enable = "true"`) in RetroArch on UDP port 55355, preferably bound to `127.0.0.1`. Wingosy may install RetroArch with this setting disabled; enable it in RetroArch's `retroarch.cfg` before the probe can connect. With `config.local.json` filled in, run:
 
 ```powershell
 npm run probe
