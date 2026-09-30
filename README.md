@@ -24,17 +24,44 @@ The [original Pokémon Red project](https://github.com/christianmat/jev-pokemon)
 
 There is no universal game-state decoder. Raw memory reads can work across supported cores, but every game's map, menus, rules, and legal actions need a game adapter. A later visual adapter could use screenshots for games without useful memory structures. Jev would receive structured observations and bounded action choices from those adapters. Controller input, decision calls, and action execution are **not yet implemented**.
 
+## Configure your installation
+
+Install Node.js 20 or newer, then run `npm ci`. Copy `config.example.json` to `config.local.json` and edit the paths for your machine:
+
+```powershell
+Copy-Item config.example.json config.local.json
+```
+
+```json
+{
+  "retroarch": "C:/RetroArch/retroarch.exe",
+  "core": "C:/RetroArch/cores/mgba_libretro.dll",
+  "romsDirectory": "C:/Games/ROMs",
+  "rom": "gba/Pokemon - Emerald Version.gba"
+}
+```
+
+`retroarch` points to the RetroArch executable. `core` points to a **libretro core DLL** (mGBA for GBA games), not a standalone emulator executable. `romsDirectory` is the folder containing your games; `rom` is the game path within it. Absolute paths also work. Relative paths for `retroarch`, `core`, and `romsDirectory` are resolved from the config file's folder. The local config is ignored by Git so machine-specific paths stay out of the fork.
+
+This machine's `config.local.json` is set to Wingosy's managed RetroArch, mGBA core, and Emerald ROM under `AppData/Roaming/wingosy/launcher/data`. Those files were found locally. The personal config is not committed; copy the example and edit it on another machine.
+
 ## Development memory probe
 
-Install Node.js 20 or newer, then run `npm ci` and `npm run typecheck`. Use the memory probe for development or testing outside an achievement-earning run. Enable Network Commands (`network_cmd_enable = "true"`) in RetroArch on UDP port 55355, preferably bound to `127.0.0.1`.
+Use the memory probe for development or testing outside an achievement-earning run. Enable Network Commands (`network_cmd_enable = "true"`) in RetroArch on UDP port 55355, preferably bound to `127.0.0.1`. Wingosy's current `retroarch.cfg` has this setting disabled, so it must be enabled before the probe can connect. With `config.local.json` filled in, run:
 
-To start your own RetroArch installation and game, pass the executable, a libretro core, and ROM paths together:
+```powershell
+npm run probe
+```
+
+To use a different file, run `npm run probe -- --config 'C:\path\to\config.json'`. If no local config exists, the probe connects to an already running RetroArch session. You can also pass `--retroarch`, `--core`, and `--rom` together to override the configured launch paths.
+
+For a one-off launch without a config file:
 
 ```powershell
 npm run probe -- --retroarch 'C:\RetroArch\retroarch.exe' --core 'C:\RetroArch\cores\mgba_libretro.dll' --rom 'C:\Games\Emerald.gba'
 ```
 
-Paths with spaces are supported. The probe launches RetroArch with `-L CORE ROM` and waits for its network command interface. You can also start the game yourself and omit all three launch paths. This project does not copy the ROM or core into the repository. A standalone mGBA executable is not a libretro core and cannot be used with this launch mode. RetroAchievements is configured within RetroArch; its web API key is only needed for the separate achievement lookup command below.
+Paths with spaces are supported. The probe launches RetroArch with `-L CORE ROM` and waits for its network command interface. This project does not copy the ROM or core into the repository. RetroAchievements is configured within RetroArch; its web API key is only needed for the separate achievement lookup command below.
 
 Check status and read raw bytes from a core memory address:
 

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { launchRetroArch } from '../src/platform/launch.js';
+import { loadProbeConfig } from '../src/platform/config.js';
 import { readEmeraldPosition } from '../src/emerald/state.js';
 
 function option(name: string): string | undefined {
@@ -29,7 +30,7 @@ function emeraldPointerAddress(): number {
 
 async function main() {
   if (process.argv.includes('--help')) {
-    console.log('Development only: npm run probe -- [--retroarch EXE --core LIBRETRO_CORE --rom ROM] [--read 0x02000000:16] [--game emerald --symbol-file FILE]');
+    console.log('Development only: npm run probe -- [--config FILE] [--retroarch EXE --core LIBRETRO_CORE --rom ROM] [--read 0x02000000:16] [--game emerald --symbol-file FILE]');
     return;
   }
 
@@ -43,14 +44,18 @@ async function main() {
   const supplied = launchArgs.filter(arg => process.argv.includes(arg));
   if (supplied.length > 0 && supplied.length !== launchArgs.length)
     throw new Error('To launch RetroArch, provide --retroarch, --core, and --rom together.');
+  let launchPaths;
   if (supplied.length === launchArgs.length) {
     const retroarch = option('--retroarch');
     const core = option('--core');
     const rom = option('--rom');
     if (!retroarch || !core || !rom || [retroarch, core, rom].some(value => value.startsWith('--')))
       throw new Error('Launch paths cannot be empty.');
-    await launchRetroArch({ retroarch, core, rom }, observer);
+    launchPaths = { retroarch, core, rom };
+  } else {
+    launchPaths = loadProbeConfig(option('--config') ?? 'config.local.json', process.argv.includes('--config'));
   }
+  if (launchPaths) await launchRetroArch(launchPaths, observer);
   const status = await observer.status();
   if (!/^GET_STATUS (PLAYING|PAUSED)\b/.test(status)) throw new Error(`No running content: ${status}`);
   console.log(status);
