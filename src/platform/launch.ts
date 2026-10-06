@@ -7,6 +7,7 @@ export interface LaunchPaths {
   retroarch: string;
   core: string;
   rom: string;
+  retroarchConfig?: string;
 }
 
 function requireFile(label: string, file: string): string {
@@ -16,7 +17,7 @@ function requireFile(label: string, file: string): string {
   return resolved;
 }
 
-export async function launchRetroArch(paths: LaunchPaths, observer: RetroArchObserver): Promise<void> {
+export async function launchRetroArch(paths: LaunchPaths, observer: RetroArchObserver): Promise<number> {
   const retroarch = requireFile('RetroArch executable', paths.retroarch);
   const core = requireFile('Libretro core', paths.core);
   const rom = requireFile('ROM', paths.rom);
@@ -29,7 +30,10 @@ export async function launchRetroArch(paths: LaunchPaths, observer: RetroArchObs
     if (error instanceof Error && !error.message.startsWith('RetroArch did not respond')) throw error;
   }
 
-  const child = spawn(retroarch, ['-L', core, rom], {
+  const args = paths.retroarchConfig
+    ? ['--config', requireFile('RetroArch config', paths.retroarchConfig), '-L', core, rom]
+    : ['-L', core, rom];
+  const child = spawn(retroarch, args, {
     cwd: path.dirname(retroarch),
     detached: true,
     stdio: 'ignore',
@@ -43,7 +47,10 @@ export async function launchRetroArch(paths: LaunchPaths, observer: RetroArchObs
     if (child.exitCode !== null) throw new Error(`RetroArch exited with code ${child.exitCode}`);
     try {
       const status = await observer.status();
-      if (/^GET_STATUS (PLAYING|PAUSED)\b/.test(status)) return;
+      if (/^GET_STATUS (PLAYING|PAUSED)\b/.test(status)) {
+        if (!child.pid) throw new Error('RetroArch process ID unavailable');
+        return child.pid;
+      }
     } catch (error) {
       if (launchError) throw launchError;
       if (!(error instanceof Error) || !error.message.startsWith('RetroArch did not respond')) throw error;

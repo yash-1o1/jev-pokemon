@@ -1,18 +1,25 @@
 {
   "name": "jev-game-harness",
   "version": "0.1.0",
-  "description": "Read-only RetroArch game probe, starting with Pokémon Emerald",
+  "description": "RetroArch game harness with Jev, starting with Pokémon Emerald",
   "type": "module",
   "private": true,
   "license": "GPL-2.0-or-later",
   "scripts": {
     "probe": "tsx scripts/probe.ts",
+    "play": "tsx scripts/play.ts",
     "achievements": "tsx scripts/achievements.ts",
+    "test": "node --import tsx --test tests/*.test.ts",
     "typecheck": "tsc"
   },
   "devDependencies": {
     "@types/node": "^26.6.2",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "@typesafe-ai/sdk": "^0.6.0",
+    "sharp": "^0.35.5",
+    "tesseract.js": "^6.0.1"
   }
 }

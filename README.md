@@ -1,32 +1,29 @@
-# Game harness starter
+# Jev game harness
 
-A small starting point for observing games in your own RetroArch installation. Pokémon Emerald is the first game-specific decoder. The project does not include an emulator, ROM, or Jev integration.
+A small RetroArch harness for games you own. Pokémon Emerald on GBA is the first game adapter. It uses your existing RetroArch installation, libretro core, and ROM; none are distributed here.
 
-## How the pieces fit
+## What it does
+
+The `play` command launches an isolated RetroArch profile, captures screenshots, reads core RAM when available, turns the screen into text with OCR, asks Jev to choose one bounded controller button, and sends that button through RetroArch's Network RetroPad. Each observation and action is logged to `.local/play.jsonl`. You can also run an offline mock controller loop to check the plumbing without a Jev API key.
 
 ```text
-RetroArch + core + your game
-          │
-          ▼
-platform adapter (status, raw memory)
-          │
-          ├── raw probe for any core exposing a memory map
-          └── game adapter (Emerald position today)
-                       │
-                       ▼
-              structured observations
-                       │
-                       ▼
-          future action choices and Jev client
+ROM + libretro core in RetroArch
+       | screenshots + optional RAM
+       v
+  game observation + OCR
+       | structured text
+       v
+   Jev action choice
+       | one RetroPad button
+       v
+  RetroArch Network RetroPad
 ```
 
-The [original Pokémon Red project](https://github.com/christianmat/jev-pokemon) used the `serverboy` Game Boy emulator directly in Node. Its harness advanced frames, read memory, generated legal choices, sent those choices to Jev, and executed the selected choice as button presses. It was not a desktop computer-use system. A [Balatro Jev project](https://github.com/IgorWarzocha/jev-plays-balatro) uses the same basic pattern with a game mod that provides state and actions.
+The platform layer can run another RetroArch game by changing the ROM and core paths. The Emerald adapter adds player coordinates from its save block. Other games need their own memory decoder for reliable structured state. OCR is a basic fallback; it can misread or miss small GBA text. Jev does not receive the screenshot pixels in this implementation.
 
-There is no universal game-state decoder. Raw memory reads can work across supported cores, but every game's map, menus, rules, and legal actions need a game adapter. A later visual adapter could use screenshots for games without useful memory structures. Jev would receive structured observations and bounded action choices from those adapters. Controller input, decision calls, and action execution are **not yet implemented**.
+## Set up your installation
 
-## Configure your installation
-
-Install Node.js 20 or newer, then run `npm ci`. Copy `config.example.json` to `config.local.json` and edit the paths for your machine:
+Install Node.js 20 or newer and run `npm ci`. Copy `config.example.json` to `config.local.json` and set paths for your machine:
 
 ```powershell
 Copy-Item config.example.json config.local.json
@@ -41,61 +38,62 @@ Copy-Item config.example.json config.local.json
 }
 ```
 
-`retroarch` points to the RetroArch executable. `core` points to a **libretro core DLL** (mGBA for GBA games), not a standalone emulator executable. `romsDirectory` is the folder containing your games; `rom` is the game path within it. Absolute paths also work. Relative paths for `retroarch`, `core`, and `romsDirectory` are resolved from the config file's folder. The local config is ignored by Git so machine-specific paths stay out of the fork.
+`core` is a libretro core DLL, not a standalone emulator executable. `rom` is relative to `romsDirectory`, or it may be an absolute path. The local config is ignored by Git. On this machine, `config.local.json` points to Wingosy's managed RetroArch, mGBA core, and Emerald ROM under `AppData/Roaming/wingosy/launcher/data`. The project never copies the ROM or core into the repository.
 
-This machine's `config.local.json` is set to Wingosy's managed RetroArch, mGBA core, and Emerald ROM under `AppData/Roaming/wingosy/launcher/data`. Those files were found locally. The personal config is not committed; copy the example and edit it on another machine.
-
-## Development memory probe
-
-Use the memory probe for development or testing outside an achievement-earning run. Enable Network Commands (`network_cmd_enable = "true"`) in RetroArch on UDP port 55355, preferably bound to `127.0.0.1`. Wingosy may install RetroArch with this setting disabled; enable it in RetroArch's `retroarch.cfg` before the probe can connect. With `config.local.json` filled in, run:
+Check the paths and isolated profile:
 
 ```powershell
-npm run probe
+npm run play -- --check
 ```
 
-To use a different file, run `npm run probe -- --config 'C:\path\to\config.json'`. If no local config exists, the probe connects to an already running RetroArch session. You can also pass `--retroarch`, `--core`, and `--rom` together to override the configured launch paths.
+## Play
 
-For a one-off launch without a config file:
+Set your TypeSafe/Jev API key in your shell and run a short session:
 
 ```powershell
-npm run probe -- --retroarch 'C:\RetroArch\retroarch.exe' --core 'C:\RetroArch\cores\mgba_libretro.dll' --rom 'C:\Games\Emerald.gba'
+$env:TYPESAFE_API_KEY = '<your API key>'
+npm run play -- --game emerald --steps 10
 ```
 
-Paths with spaces are supported. The probe launches RetroArch with `-L CORE ROM` and waits for its network command interface. This project does not copy the ROM or core into the repository. RetroAchievements is configured within RetroArch; its web API key is only needed for the separate achievement lookup command below.
+The key stays in the environment; do not put it in a tracked file. Without a key, use the offline plumbing check:
 
-Check status and read raw bytes from a core memory address:
+```powershell
+npm run play -- --backend mock --game emerald --steps 10
+```
+
+Omit `--game emerald` to use status and OCR only with a different configured game. `--config FILE` selects another local config. `--no-ocr` skips screenshots and text extraction, which is useful for testing the Emerald memory adapter. The mock backend cycles buttons; it does not play strategically. Each run leaves the development RetroArch session open, and another run attaches to it.
+
+The default Emerald `gSaveBlock1Ptr` address is `0x03005D8C`, verified against this machine's retail Emerald ROM. For another build, pass `--symbol-file FILE` containing `gSaveBlock1Ptr`, or `--save-block-pointer-address 0x...`. The adapter reports position errors during boot or when the pointer cannot be resolved.
+
+## RetroAchievements isolation
+
+Autonomous play launches RetroArch with `.local/retroarch-dev.cfg`, built from your installed config. The development profile disables RetroAchievements and Hardcore, clears its credentials, enables network commands on port 55356 and Network RetroPad on port 55420, and uses local save and screenshot folders. It does not edit your installed RetroArch config. Close the development RetroArch window when finished.
+
+[RetroAchievements rules prohibit bots and complex scripts from earning achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html). Do not use `probe` or `play` to earn achievements. Your regular RetroArch login and achievements settings remain in its own config.
+
+## Probe and achievement lookup
+
+`npm run probe` is a development memory probe. It connects to RetroArch's network command port 55355 by default, or launches the configured ROM there. For a raw read:
 
 ```powershell
 npm run probe -- --read 0x02000000:16
 ```
 
-You can repeat `--read`. The address is hexadecimal with `0x` or decimal without it; length is decimal and limited to 256 bytes per read. The core must expose a compatible memory map.
-
-For Pokémon Emerald, provide the `gSaveBlock1Ptr` address for the **exact ROM build**, preferably from a matching `pokeemerald.sym`:
+For Emerald's position, provide a matching symbol file:
 
 ```powershell
 npm run probe -- --game emerald --symbol-file 'C:\path\to\pokeemerald.sym'
 ```
 
-You can instead supply `--save-block-pointer-address 0x...` if its value has been verified for your build. The Emerald adapter reads map group, map number, and player X/Y. Another game's decoder would live beside `src/emerald/state.ts` and consume the same `MemoryReader` interface.
+`probe` uses the regular RetroArch config if it launches a game, so use it only for development outside an achievement session. Some cores expose no `READ_CORE_MEMORY` map; the probe falls back to the GBA RAM layout used by `READ_CORE_RAM` for GBA addresses.
 
-## Achievement lookup
-
-The official RetroAchievements web API can list your progress without connecting to RetroArch or reading emulator memory. Set your key locally; never commit it. The game ID must match your game.
+The separate official RetroAchievements web API lookup needs your own API key:
 
 ```powershell
 $env:RA_WEB_API_KEY = '<your key>'
 npm run achievements -- --game-id <game-id> --username <username>
 ```
 
-The API may lag behind an unlock. The achievement lookup and memory probe are separate commands. Do not combine memory probing and automated play to earn RetroAchievements.
+Sources: [RetroArch command line](https://docs.libretro.com/guides/cli-intro/), [Network Control Interface](https://docs.libretro.com/development/retroarch/network-control-interface/), [Remote RetroPad](https://docs.libretro.com/library/remote_retropad/), [Emerald SaveBlock1 structure](https://github.com/pret/pokeemerald/blob/master/include/global.h).
 
-## Current limits
-
-The probe sends only `GET_STATUS` and `READ_CORE_MEMORY`. RetroArch documents memory reads, but we have not verified on a live session whether they leave the Hardcore indicator active. Even if it stays active, that would **not** establish RetroAchievements permission to use a memory-driven bot. The network interface does not report whether Hardcore is active. No controller input or save-state recovery is present.
-
-RetroAchievements [prohibits bots and complex scripts from gaining achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html). A future autonomous player must not be presented as a compliant achievement run. A human-operated advisor can use achievement information without automating gameplay.
-
-Sources: [RetroArch command line](https://docs.libretro.com/guides/cli-intro/), [RetroArch network commands](https://docs.libretro.com/development/retroarch/network-control-interface/), [pokeemerald SaveBlock1](https://github.com/pret/pokeemerald/blob/master/include/global.h), [official achievement API](https://api-docs.retroachievements.org/v1/get-game-info-and-user-progress.html).
-
-This repository is a fork of `christianmat/jev-pokemon`. Licensed under GPL-2.0-or-later; see [LICENSE](LICENSE).
+Forked from [christianmat/jev-pokemon](https://github.com/christianmat/jev-pokemon). Licensed under GPL-2.0-or-later; see [LICENSE](LICENSE).
