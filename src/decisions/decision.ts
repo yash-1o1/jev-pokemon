@@ -78,7 +78,7 @@ export async function chooseAction(
   }
   const image = await sharp(screenshot).resize({ width: 960, kernel: 'nearest' }).png().toBuffer();
   const imageUrl = `data:image/png;base64,${image.toString('base64')}`;
-  client ??= new OpenAI();
+  client ??= new OpenAI({ maxRetries: 0 });
   const result = await client.decisions.create(
     decisionRequest(observation, history, imageUrl, goal),
   );

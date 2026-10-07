@@ -74,18 +74,28 @@ async function main(): Promise<void> {
   const logFile = path.resolve('.local/play.jsonl');
   const history: StepRecord[] = [];
   console.log(`Development session ${attached ? 'attached' : 'started'} on port 55356; RetroAchievements disabled; PID ${processId}`);
-  for (let step = 0; step < steps; step++) {
-    const observation = await observeGame(observer, game, pointerAddress);
-    const screenshot = await observer.screenshot(path.resolve('.local/screenshots'));
-    const action = await chooseAction(observation, history, backend, screenshot, goal);
-    const record: StepRecord = { observation, action };
-    fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
-    console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
-    history.push(record);
-    if (action !== 'WAIT') await pressButton(action);
-    await new Promise(resolve => setTimeout(resolve, 500));
+  try {
+    for (let step = 0; step < steps; step++) {
+      const observation = await observeGame(observer, game, pointerAddress);
+      const screenshot = await observer.screenshot(path.resolve('.local/screenshots'));
+      const action = await chooseAction(observation, history, backend, screenshot, goal);
+      const record: StepRecord = { observation, action };
+      fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
+      console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
+      history.push(record);
+      if (action !== 'WAIT') await pressButton(action);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  } catch (error) {
+    if (!attached) {
+      try { process.kill(processId); } catch { /* Already closed. */ }
+    }
+    throw error;
   }
   console.log(`Completed ${steps} steps. Session log: ${logFile}`);
 }
 
-main().catch(error => { console.error(error); process.exitCode = 1; });
+main().catch(error => {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exitCode = 1;
+});

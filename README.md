@@ -55,7 +55,7 @@ $env:OPENAI_API_KEY = '<your API key>'
 npm run play -- --game emerald --steps 10
 ```
 
-The key stays in the environment; do not put it in a tracked file. Without a key, use the offline plumbing check:
+The key stays in the environment; do not put it in a tracked file. The API account also needs available credits. Without a key, use the offline plumbing check:
 
 ```powershell
 npm run play -- --backend mock --game emerald --steps 10
