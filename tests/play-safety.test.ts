@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { makeDevelopmentConfig } from '../src/platform/dev-profile.js';
 import { buttonPacket } from '../src/platform/input.js';
+import { answerAction, decisionRequest } from '../src/decisions/decision.js';
 
 test('development profile disables achievements and clears credentials in repeated settings', () => {
   const source = [
@@ -30,4 +31,20 @@ test('Network RetroPad sends the expected 20-byte start button packet', () => {
   assert.equal(down.readInt32LE(12), 3);
   assert.equal(down.readUInt16LE(16), 1);
   assert.equal(up.readUInt16LE(16), 0);
+});
+
+test('Decisions request sends image and limits the answer to controller buttons', () => {
+  const request = decisionRequest(
+    { status: 'GET_STATUS PLAYING game_boy_advance,Emerald' },
+    [],
+    'data:image/png;base64,AAAA',
+    'Advance past the title screen',
+  );
+  assert.equal(request.model, 'gpt-6-luna');
+  assert.equal(request.input[0].content[1].type, 'input_image');
+  assert.equal(request.questions[0].type, 'choice');
+  assert.deepEqual(request.questions[0].choices.map(choice => choice.value),
+    ['UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT', 'L', 'R', 'WAIT']);
+  assert.equal(answerAction([{ type: 'choice', name: 'nextAction', choice: 'START' }]), 'START');
+  assert.throws(() => answerAction([{ type: 'choice', name: 'nextAction', choice: 'RESET' }]));
 });

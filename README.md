@@ -1,25 +1,25 @@
-# Jev game harness
+# OpenAI Decisions game harness
 
 A small RetroArch harness for games you own. Pokémon Emerald on GBA is the first game adapter. It uses your existing RetroArch installation, libretro core, and ROM; none are distributed here.
 
 ## What it does
 
-The `play` command launches an isolated RetroArch profile, captures screenshots, reads core RAM when available, turns the screen into text with OCR, asks Jev to choose one bounded controller button, and sends that button through RetroArch's Network RetroPad. Each observation and action is logged to `.local/play.jsonl`. You can also run an offline mock controller loop to check the plumbing without a Jev API key.
+The `play` command launches an isolated RetroArch profile, captures screenshots, reads core RAM when available, asks the OpenAI Decisions API to choose one bounded controller button from the screenshot and state, and sends that button through RetroArch's Network RetroPad. Each observation and action is logged to `.local/play.jsonl`. You can also run an offline mock controller loop to check the plumbing without an API key.
 
 ```text
 ROM + libretro core in RetroArch
        | screenshots + optional RAM
        v
-  game observation + OCR
-       | structured text
+  game observation + screenshot
+       | state and image
        v
-   Jev action choice
+   Decisions choice question
        | one RetroPad button
        v
   RetroArch Network RetroPad
 ```
 
-The platform layer can run another RetroArch game by changing the ROM and core paths. The Emerald adapter adds player coordinates from its save block. Other games need their own memory decoder for reliable structured state. OCR is a basic fallback; it can misread or miss small GBA text. Jev does not receive the screenshot pixels in this implementation.
+The platform layer can run another RetroArch game by changing the ROM and core paths. The Emerald adapter adds player coordinates from its save block. Other games need their own memory decoder for reliable structured state. The Decisions API receives an enlarged screenshot directly; small game text and visuals can still be ambiguous.
 
 ## Set up your installation
 
@@ -48,10 +48,10 @@ npm run play -- --check
 
 ## Play
 
-Set your TypeSafe/Jev API key in your shell and run a short session:
+Set your OpenAI API key in your shell and run a short session:
 
 ```powershell
-$env:TYPESAFE_API_KEY = '<your API key>'
+$env:OPENAI_API_KEY = '<your API key>'
 npm run play -- --game emerald --steps 10
 ```
 
@@ -61,7 +61,7 @@ The key stays in the environment; do not put it in a tracked file. Without a key
 npm run play -- --backend mock --game emerald --steps 10
 ```
 
-Omit `--game emerald` to use status and OCR only with a different configured game. `--config FILE` selects another local config. `--no-ocr` skips screenshots and text extraction, which is useful for testing the Emerald memory adapter. The mock backend cycles buttons; it does not play strategically. Each run leaves the development RetroArch session open, and another run attaches to it.
+Omit `--game emerald` to use status and screenshots only with a different configured game. `--config FILE` selects another local config. `--goal TEXT` sets the objective sent with each decision. The Decisions API currently supports `gpt-6-luna` only. The mock backend cycles buttons; it does not play strategically. Each run leaves the development RetroArch session open, and another run attaches to it.
 
 The default Emerald `gSaveBlock1Ptr` address is `0x03005D8C`, verified against this machine's retail Emerald ROM. For another build, pass `--symbol-file FILE` containing `gSaveBlock1Ptr`, or `--save-block-pointer-address 0x...`. The adapter reports position errors during boot or when the pointer cannot be resolved.
 
@@ -94,6 +94,6 @@ $env:RA_WEB_API_KEY = '<your key>'
 npm run achievements -- --game-id <game-id> --username <username>
 ```
 
-Sources: [RetroArch command line](https://docs.libretro.com/guides/cli-intro/), [Network Control Interface](https://docs.libretro.com/development/retroarch/network-control-interface/), [Remote RetroPad](https://docs.libretro.com/library/remote_retropad/), [Emerald SaveBlock1 structure](https://github.com/pret/pokeemerald/blob/master/include/global.h).
+Sources: [OpenAI Decisions API](https://developers.openai.com/api/reference/resources/decisions/methods/create), [RetroArch command line](https://docs.libretro.com/guides/cli-intro/), [Network Control Interface](https://docs.libretro.com/development/retroarch/network-control-interface/), [Remote RetroPad](https://docs.libretro.com/library/remote_retropad/), [Emerald SaveBlock1 structure](https://github.com/pret/pokeemerald/blob/master/include/global.h).
 
 Forked from [christianmat/jev-pokemon](https://github.com/christianmat/jev-pokemon). Licensed under GPL-2.0-or-later; see [LICENSE](LICENSE).

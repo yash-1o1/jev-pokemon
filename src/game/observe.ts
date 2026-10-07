@@ -8,7 +8,6 @@ export interface Observation {
   status: string;
   position?: EmeraldPosition;
   positionError?: string;
-  screenText?: string;
 }
 
 export async function observeGame(observer: RetroArchObserver, game?: string, pointerAddress = EMERALD_SAVE_BLOCK_POINTER): Promise<Observation> {

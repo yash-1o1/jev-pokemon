@@ -5,10 +5,9 @@ import { createDevelopmentProfile, assertDevelopmentProfile } from '../src/platf
 import { launchRetroArch } from '../src/platform/launch.js';
 import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton } from '../src/platform/input.js';
-import { ScreenReader } from '../src/platform/ocr.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
 import { observeGame, EMERALD_SAVE_BLOCK_POINTER } from '../src/game/observe.js';
-import { chooseAction, type StepRecord } from '../src/jev/decision.js';
+import { chooseAction, type StepRecord } from '../src/decisions/decision.js';
 
 function option(name: string): string | undefined {
   const index = process.argv.indexOf(name);
@@ -41,7 +40,7 @@ function emeraldPointerAddress(): number {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--help')) {
-    console.log('Usage: npm run play -- [--config FILE] [--game emerald] [--backend jev|mock] [--steps 10] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--no-ocr] [--check]');
+    console.log('Usage: npm run play -- [--config FILE] [--game emerald] [--backend decisions|mock] [--steps 10] [--goal TEXT] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
     return;
   }
   const paths = loadProbeConfig(option('--config') ?? 'config.local.json', true);
@@ -51,10 +50,11 @@ async function main(): Promise<void> {
   }
   const game = option('--game');
   if (game && game !== 'emerald') throw new Error(`No decoder for game: ${game}`);
-  const backend = option('--backend') ?? 'jev';
-  if (backend !== 'jev' && backend !== 'mock') throw new Error('Use --backend jev or --backend mock');
-  if (backend === 'jev' && !process.env.TYPESAFE_API_KEY && !process.argv.includes('--check'))
-    throw new Error('Set TYPESAFE_API_KEY for Jev, or use --backend mock for an offline smoke test');
+  const backend = option('--backend') ?? 'decisions';
+  if (backend !== 'decisions' && backend !== 'mock') throw new Error('Use --backend decisions or --backend mock');
+  if (backend === 'decisions' && !process.env.OPENAI_API_KEY && !process.argv.includes('--check'))
+    throw new Error('Set OPENAI_API_KEY for the Decisions API, or use --backend mock for an offline smoke test');
+  const goal = option('--goal') ?? 'Play the game and make progress';
   const steps = integerOption('--steps', 10, 1, 1000);
   const pointerAddress = game === 'emerald' ? emeraldPointerAddress() : undefined;
   const profile = createDevelopmentProfile(paths.retroarch);
@@ -73,25 +73,17 @@ async function main(): Promise<void> {
   }
   const logFile = path.resolve('.local/play.jsonl');
   const history: StepRecord[] = [];
-  const screenReader = new ScreenReader();
   console.log(`Development session ${attached ? 'attached' : 'started'} on port 55356; RetroAchievements disabled; PID ${processId}`);
-  try {
-    for (let step = 0; step < steps; step++) {
-      const observation = await observeGame(observer, game, pointerAddress);
-      if (!process.argv.includes('--no-ocr')) {
-        const screenshot = await observer.screenshot(path.resolve('.local/screenshots'));
-        observation.screenText = await screenReader.read(screenshot);
-      }
-      const action = await chooseAction(observation, history, backend);
-      const record: StepRecord = { observation, action };
-      fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), ...record }) + '\n');
-      console.log(JSON.stringify({ step: step + 1, action, screenText: observation.screenText ?? null, position: observation.position ?? null, positionError: observation.positionError ?? null }));
-      history.push(record);
-      if (action !== 'WAIT') await pressButton(action);
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
-  } finally {
-    await screenReader.close();
+  for (let step = 0; step < steps; step++) {
+    const observation = await observeGame(observer, game, pointerAddress);
+    const screenshot = await observer.screenshot(path.resolve('.local/screenshots'));
+    const action = await chooseAction(observation, history, backend, screenshot, goal);
+    const record: StepRecord = { observation, action };
+    fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
+    console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
+    history.push(record);
+    if (action !== 'WAIT') await pressButton(action);
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
   console.log(`Completed ${steps} steps. Session log: ${logFile}`);
 }

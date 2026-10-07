@@ -1,7 +1,7 @@
 {
-  "name": "jev-game-harness",
+  "name": "game-decisions-harness",
   "version": "0.1.0",
-  "description": "RetroArch game harness with Jev, starting with Pokémon Emerald",
+  "description": "RetroArch game harness with OpenAI Decisions, starting with Pokémon Emerald",
   "type": "module",
   "private": true,
   "license": "GPL-2.0-or-later",
@@ -18,8 +18,7 @@
     "typescript": "^7.0.2"
   },
   "dependencies": {
-    "@typesafe-ai/sdk": "^0.6.0",
-    "sharp": "^0.35.5",
-    "tesseract.js": "^6.0.1"
+    "openai": "^7.30.0",
+    "sharp": "^0.35.5"
   }
 }
