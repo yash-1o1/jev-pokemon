@@ -2,5 +2,6 @@
   "retroarch": "C:/RetroArch/retroarch.exe",
   "core": "C:/RetroArch/cores/mgba_libretro.dll",
   "romsDirectory": "C:/Games/ROMs",
-  "rom": "gba/Pokemon - Emerald Version.gba"
+  "rom": "gba/Pokemon - Emerald Version.gba",
+  "gameChoices": {}
 }

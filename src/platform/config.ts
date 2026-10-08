@@ -43,3 +43,20 @@ export function loadProbeConfig(file: string, required = false): LaunchPaths | u
     rom: path.resolve(romRoot, rom!),
   };
 }
+
+export function loadGameChoices(file: string): Record<string, string> {
+  const parsed: unknown = JSON.parse(fs.readFileSync(path.resolve(file), 'utf8'));
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed))
+    throw new Error('Config must be a JSON object');
+  const choices = (parsed as Record<string, unknown>).gameChoices;
+  if (choices === undefined) return {};
+  if (!choices || typeof choices !== 'object' || Array.isArray(choices))
+    throw new Error('gameChoices must be a JSON object');
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(choices)) {
+    if (!key.trim() || typeof value !== 'string' || !value.trim())
+      throw new Error('Each gameChoices entry needs a name and non-empty text value');
+    result[key.trim()] = value.trim();
+  }
+  return result;
+}

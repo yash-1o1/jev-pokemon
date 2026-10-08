@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadProbeConfig } from '../src/platform/config.js';
+import { loadGameChoices, loadProbeConfig } from '../src/platform/config.js';
 import { createDevelopmentProfile, assertDevelopmentProfile } from '../src/platform/dev-profile.js';
 import { launchRetroArch } from '../src/platform/launch.js';
 import { RetroArchObserver } from '../src/platform/retroarch.js';
@@ -41,11 +41,13 @@ function emeraldPointerAddress(): number {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--help')) {
-    console.log('Usage: npm run play -- [--config FILE] [--game emerald] [--backend decisions|mock] [--steps 10] [--goal TEXT] [--instructions FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
+    console.log('Usage: npm run play -- [--config FILE] [--game emerald] [--backend decisions|mock] [--steps 10] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
     return;
   }
-  const paths = loadProbeConfig(option('--config') ?? 'config.local.json', true);
+  const configFile = option('--config') ?? 'config.local.json';
+  const paths = loadProbeConfig(configFile, true);
   if (!paths) throw new Error('Config must contain retroarch, core, and rom');
+  const gameChoices = loadGameChoices(configFile);
   for (const [label, file] of Object.entries(paths)) {
     if (!fs.existsSync(file)) throw new Error(`${label} not found: ${file}`);
   }
@@ -58,16 +60,18 @@ async function main(): Promise<void> {
   const goal = option('--goal') ?? 'Play the game and make progress';
   if (process.argv.includes('--instructions') && !option('--instructions'))
     throw new Error('--instructions needs a file path');
-  const instructionsFile = path.resolve(option('--instructions') ??
-    fileURLToPath(new URL('../instructions/base.md', import.meta.url)));
-  const baseInstructions = fs.readFileSync(instructionsFile, 'utf8').trim();
-  if (!baseInstructions) throw new Error(`Instructions file is empty: ${instructionsFile}`);
+  const baseInstructionsFile = fileURLToPath(new URL('../instructions/base.md', import.meta.url));
+  const baseInstructions = fs.readFileSync(baseInstructionsFile, 'utf8').trim();
+  if (!baseInstructions) throw new Error(`Instructions file is empty: ${baseInstructionsFile}`);
+  const extraInstructionsFile = option('--instructions') ? path.resolve(option('--instructions')!) : undefined;
+  const extraInstructions = extraInstructionsFile ? fs.readFileSync(extraInstructionsFile, 'utf8').trim() : '';
+  const instructions = extraInstructions ? `${baseInstructions}\n\n${extraInstructions}` : baseInstructions;
   const steps = integerOption('--steps', 10, 1, 1000);
   const pointerAddress = game === 'emerald' ? emeraldPointerAddress() : undefined;
   const profile = createDevelopmentProfile(paths.retroarch);
   assertDevelopmentProfile(profile);
   if (process.argv.includes('--check')) {
-    console.log(JSON.stringify({ paths, profile, instructionsFile, achievements: 'disabled', networkPort: 55356 }, null, 2));
+    console.log(JSON.stringify({ paths, profile, baseInstructionsFile, extraInstructionsFile, gameChoices, achievements: 'disabled', networkPort: 55356 }, null, 2));
     return;
   }
   const observer = new RetroArchObserver('127.0.0.1', 55356);
@@ -85,11 +89,15 @@ async function main(): Promise<void> {
     for (let step = 0; step < steps; step++) {
       const observation = await observeGame(observer, game, pointerAddress);
       const screenshot = await observer.screenshot(path.resolve('.local/screenshots'));
-      const action = await chooseAction(observation, history, backend, screenshot, goal, baseInstructions);
+      const action = await chooseAction(observation, history, backend, screenshot, goal, instructions, gameChoices);
       const record: StepRecord = { observation, action };
       fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
       console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
       history.push(record);
+      if (action === 'NEED_USER_INPUT') {
+        console.log(`Personal choice needed. Review the current screen at ${screenshot}, add your choice under gameChoices in ${path.resolve(configFile)}, then rerun play to continue this session.`);
+        return;
+      }
       if (action !== 'WAIT') await pressButton(action);
       await new Promise(resolve => setTimeout(resolve, 500));
     }

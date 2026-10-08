@@ -3,20 +3,21 @@ import sharp from 'sharp';
 import type { Observation } from '../game/observe.js';
 import { BUTTONS, type Button } from '../platform/input.js';
 
-export type Action = Button | 'WAIT';
+export type Action = Button | 'WAIT' | 'NEED_USER_INPUT';
 export interface StepRecord {
   observation: Observation;
   action: Action;
 }
 export type Backend = 'decisions' | 'mock';
 
-const ACTIONS = [...BUTTONS, 'WAIT'] as const;
+const ACTIONS = [...BUTTONS, 'WAIT', 'NEED_USER_INPUT'] as const;
 const DESCRIPTIONS: Record<Action, string> = {
   UP: 'Move up', DOWN: 'Move down', LEFT: 'Move left', RIGHT: 'Move right',
   A: 'Confirm or interact', B: 'Cancel or go back',
   START: 'Start or open the menu', SELECT: 'Select',
   L: 'Left shoulder button', R: 'Right shoulder button',
   WAIT: 'Wait for the game to advance or when the next action is unclear',
+  NEED_USER_INPUT: 'Stop: the game requires a personal choice not supplied in gameChoices',
 };
 
 export function decisionRequest(
@@ -25,9 +26,11 @@ export function decisionRequest(
   imageUrl: string,
   goal: string,
   baseInstructions: string,
+  gameChoices: Record<string, string>,
 ) {
   const evidence = {
     goal,
+    gameChoices,
     game: observation.status,
     position: observation.position ?? null,
     positionError: observation.positionError ?? null,
@@ -48,7 +51,7 @@ export function decisionRequest(
     questions: [{
       type: 'choice' as const,
       name: 'nextAction',
-      instructions: `${baseInstructions.trim()}\n\nChoose exactly one short gamepad action toward the goal provided in the input.`,
+      instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input, or NEED_USER_INPUT when a required personal choice is missing.`,
       choices: ACTIONS.map(value => ({ value, description: DESCRIPTIONS[value] })),
     }],
   };
@@ -72,6 +75,7 @@ export async function chooseAction(
   screenshot: string,
   goal: string,
   baseInstructions: string,
+  gameChoices: Record<string, string>,
 ): Promise<Action> {
   if (backend === 'mock') {
     if (!observation.position || (observation.position.x === 0 && observation.position.y === 0))
@@ -82,7 +86,7 @@ export async function chooseAction(
   const imageUrl = `data:image/png;base64,${image.toString('base64')}`;
   client ??= new OpenAI({ maxRetries: 0 });
   const result = await client.decisions.create(
-    decisionRequest(observation, history, imageUrl, goal, baseInstructions),
+    decisionRequest(observation, history, imageUrl, goal, baseInstructions, gameChoices),
   );
   return answerAction(result.answers);
 }

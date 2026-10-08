@@ -34,11 +34,20 @@ Copy-Item config.example.json config.local.json
   "retroarch": "C:/RetroArch/retroarch.exe",
   "core": "C:/RetroArch/cores/mgba_libretro.dll",
   "romsDirectory": "C:/Games/ROMs",
-  "rom": "gba/Pokemon - Emerald Version.gba"
+  "rom": "gba/Pokemon - Emerald Version.gba",
+  "gameChoices": {}
 }
 ```
 
 `core` is a libretro core DLL, not a standalone emulator executable. `rom` is relative to `romsDirectory`, or it may be an absolute path. The local config is ignored by Git. On this machine, `config.local.json` points to Wingosy's managed RetroArch, mGBA core, and Emerald ROM under `AppData/Roaming/wingosy/launcher/data`. The project never copies the ROM or core into the repository.
+
+Set personal game choices in the ignored `config.local.json`, for example
+`"gameChoices": { "trainerName": "Alex", "avatar": "Male" }`. The harness
+includes these choices in each Decisions request. If the game asks for a
+personal choice that is missing, the agent can choose `NEED_USER_INPUT`;
+play stops and prints the screenshot path so you can add the choice and rerun.
+Entering a name still requires the agent to navigate the game's on-screen
+keyboard one button at a time.
 
 Check the paths and isolated profile:
 
@@ -64,10 +73,18 @@ npm run play -- --backend mock --game emerald --steps 10
 Omit `--game emerald` to use status and screenshots only with a different configured game. `--config FILE` selects another local config. `--goal TEXT` sets the objective sent with each decision. The Decisions API currently supports `gpt-6-luna` only. The mock backend cycles buttons; it does not play strategically. Each run leaves the development RetroArch session open, and another run attaches to it.
 
 Shared play rules live in [instructions/base.md](instructions/base.md). The harness sends
-them with every Decisions choice question. Edit that file for project-wide rules, or
-keep personal rules in an ignored local file and select it with
-`--instructions .local/my-instructions.md`. The Decisions API accepts question
-instructions and user evidence, rather than a separate system message.
+them with every Decisions choice question. For private additions, copy the neutral
+[personal instructions template](instructions/personal.example.md) into the ignored
+`.local` folder, edit your copy, and select it:
+
+```powershell
+Copy-Item instructions/personal.example.md .local/my-instructions.md
+npm run play -- --game emerald --instructions .local/my-instructions.md
+```
+
+The extra file is appended to the shared rules; it is never committed. The
+Decisions API accepts question instructions and user evidence, rather than a
+separate system message.
 
 The default Emerald `gSaveBlock1Ptr` address is `0x03005D8C`, verified against this machine's retail Emerald ROM. For another build, pass `--symbol-file FILE` containing `gSaveBlock1Ptr`, or `--save-block-pointer-address 0x...`. The adapter reports position errors during boot or when the pointer cannot be resolved.
 
