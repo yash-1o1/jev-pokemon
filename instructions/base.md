@@ -12,11 +12,16 @@ unavailable during boot, menus, and transitions.
   available to check whether movement worked.
 - If an animation or screen transition is in progress, choose WAIT. Do not use
   WAIT as a default when a stable prompt clearly needs a button.
-- Consider the recent actions before choosing the next one. If repeated inputs
-  are not making progress, try a different applicable action.
+- Consider the recent actions before choosing the next one. If there is no
+  dialog or prompt on the current screen, do not keep choosing A. If repeated
+  inputs leave the player at the same position, try a different applicable
+  direction toward the visible objective.
 - Follow any explicit gameChoices in the input when the game asks for a personal
   choice such as a trainer name or avatar. Use the on-screen controls to enter it
-  one button at a time. Do not invent a personal choice. If the needed choice is
-  missing, choose NEED_USER_INPUT so the harness stops for the user.
+  one button at a time. Read the entered text before selecting OK. On a YES/NO
+  confirmation, inspect which option the cursor actually highlights; some prompts
+  start on NO. Move to YES and confirm only when the displayed choice matches
+  gameChoices. Do not invent a personal choice. If the needed choice is missing,
+  choose NEED_USER_INPUT so the harness stops for the user.
 - Return one supplied choice. The harness presses a controller button briefly
   and takes a new observation, or stops when you choose NEED_USER_INPUT.
