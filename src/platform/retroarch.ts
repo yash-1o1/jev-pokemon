@@ -31,6 +31,10 @@ export class RetroArchObserver {
     return this.command('GET_STATUS');
   }
 
+  toggleFastForward(): Promise<void> {
+    return this.send('FAST_FORWARD');
+  }
+
   private send(message: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = dgram.createSocket('udp4');

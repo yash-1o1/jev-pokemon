@@ -16,6 +16,8 @@ unavailable during boot, menus, and transitions.
   dialog or prompt on the current screen, do not keep choosing A. If repeated
   inputs leave the player at the same position, try a different applicable
   direction toward the visible objective.
+- If the same NPC repeats dialogue after several A presses, the conversation
+  has ended. Move away toward the goal instead of interacting with them again.
 - Follow any explicit gameChoices in the input when the game asks for a personal
   choice such as a trainer name or avatar. Use the on-screen controls to enter it
   one button at a time. Read the entered text before selecting OK. On a YES/NO

@@ -6,3 +6,4 @@
 - Keep a recoverable in-game save before missable events. If a missable is lost, stop and reload the most recent save that predates it. Never start a new game to recover a missable.
 - Do not cross a checkpoint boundary until its listed achievements and Scott encounters are verified. If evidence is unclear, choose NEED_USER_INPUT for review rather than guessing.
 - The current checkpoint below is a short slice of the full checklist in instructions/emerald-missables.md. Follow it before moving to the next area.
+- Fast-forward is enabled once by the harness when it launches a new RetroArch session. Core screenshots may omit RetroArch's top-right fast-forward indicator, so do not infer its state from an absent icon or press Space again during an attached session.

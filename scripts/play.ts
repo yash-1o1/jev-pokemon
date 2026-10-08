@@ -86,6 +86,7 @@ async function main(): Promise<void> {
   const observer = new RetroArchObserver('127.0.0.1', 55356);
   const attached = await findDevelopmentRetroArch(profile, paths.core, paths.rom);
   const processId = attached ?? await launchRetroArch({ ...paths, retroarchConfig: profile }, observer);
+  if (!attached) await observer.toggleFastForward();
   if (attached) {
     const status = await observer.status();
     if (!status.includes(path.parse(paths.rom).name))
