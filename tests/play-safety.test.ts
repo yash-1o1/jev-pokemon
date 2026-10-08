@@ -39,10 +39,12 @@ test('Decisions request sends image and limits the answer to controller buttons'
     [],
     'data:image/png;base64,AAAA',
     'Advance past the title screen',
+    'When a start prompt is visible, choose START.',
   );
   assert.equal(request.model, 'gpt-6-luna');
   assert.equal(request.input[0].content[1].type, 'input_image');
   assert.equal(request.questions[0].type, 'choice');
+  assert.match(request.questions[0].instructions, /When a start prompt is visible, choose START/);
   assert.deepEqual(request.questions[0].choices.map(choice => choice.value),
     ['UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT', 'L', 'R', 'WAIT']);
   assert.equal(answerAction([{ type: 'choice', name: 'nextAction', choice: 'START' }]), 'START');

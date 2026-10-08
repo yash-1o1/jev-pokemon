@@ -63,6 +63,12 @@ npm run play -- --backend mock --game emerald --steps 10
 
 Omit `--game emerald` to use status and screenshots only with a different configured game. `--config FILE` selects another local config. `--goal TEXT` sets the objective sent with each decision. The Decisions API currently supports `gpt-6-luna` only. The mock backend cycles buttons; it does not play strategically. Each run leaves the development RetroArch session open, and another run attaches to it.
 
+Shared play rules live in [instructions/base.md](instructions/base.md). The harness sends
+them with every Decisions choice question. Edit that file for project-wide rules, or
+keep personal rules in an ignored local file and select it with
+`--instructions .local/my-instructions.md`. The Decisions API accepts question
+instructions and user evidence, rather than a separate system message.
+
 The default Emerald `gSaveBlock1Ptr` address is `0x03005D8C`, verified against this machine's retail Emerald ROM. For another build, pass `--symbol-file FILE` containing `gSaveBlock1Ptr`, or `--save-block-pointer-address 0x...`. The adapter reports position errors during boot or when the pointer cannot be resolved.
 
 ## RetroAchievements isolation

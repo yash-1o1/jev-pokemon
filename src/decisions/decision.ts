@@ -24,6 +24,7 @@ export function decisionRequest(
   history: StepRecord[],
   imageUrl: string,
   goal: string,
+  baseInstructions: string,
 ) {
   const evidence = {
     goal,
@@ -47,7 +48,7 @@ export function decisionRequest(
     questions: [{
       type: 'choice' as const,
       name: 'nextAction',
-      instructions: 'Choose exactly one short gamepad action to make progress toward the goal. Use the current screenshot and observed state. If an animation is running, the screen is unclear, or there is no safe progress action, choose WAIT.',
+      instructions: `${baseInstructions.trim()}\n\nChoose exactly one short gamepad action toward the goal provided in the input.`,
       choices: ACTIONS.map(value => ({ value, description: DESCRIPTIONS[value] })),
     }],
   };
@@ -70,6 +71,7 @@ export async function chooseAction(
   backend: Backend,
   screenshot: string,
   goal: string,
+  baseInstructions: string,
 ): Promise<Action> {
   if (backend === 'mock') {
     if (!observation.position || (observation.position.x === 0 && observation.position.y === 0))
@@ -80,7 +82,7 @@ export async function chooseAction(
   const imageUrl = `data:image/png;base64,${image.toString('base64')}`;
   client ??= new OpenAI({ maxRetries: 0 });
   const result = await client.decisions.create(
-    decisionRequest(observation, history, imageUrl, goal),
+    decisionRequest(observation, history, imageUrl, goal, baseInstructions),
   );
   return answerAction(result.answers);
 }
