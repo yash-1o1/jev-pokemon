@@ -100,6 +100,10 @@ npm run play -- --game emerald --achievements --steps 10
 
 On this machine, press Space once after a new RetroArch session loads to toggle fast-forward. Press it again to return to normal speed. Space is only needed when launching a new session, not when `play` attaches to one already running. For a complete Emerald route, check the live [achievement set and missable filter](https://retroachievements.org/game/668) and the [community guide](https://github.com/RetroAchievements/guides/wiki/(WIP)-Pokemon-Emerald-(Game-Boy-Advance)) before story checkpoints.
 
+Emerald achievement runs automatically include [completion rules](instructions/emerald-achievement-rules.md) and the current checkpoint in every Decisions request. The [missable checkpoint ledger](instructions/emerald-missables.md) stays on disk; only the current slice is sent each step. Copy the relevant checkpoint text to ignored `.local/ra-run/current-checkpoint.md` as the route advances. The default is [Littleroot through Route 103](instructions/emerald-early-checkpoint.md). The rules prohibit Pokemon nicknames, require an in-game save every 30 minutes and before missable events, and call for a reload from an earlier save if one is lost. Do not start a new game to recover a missed event. Recheck the live set's missable filter at each boundary because the community guide is still in progress.
+
+When the game visibly confirms an in-game save, the agent can choose `SAVE_CONFIRMED` to update ignored `.local/ra-run/last-save-at.txt` and make an `.srm` backup after RetroArch flushes it; the elapsed time is then included in later goals. Keep pre-event `.srm` backups under `.local/ra-run/backups`. To restore one, close RetroArch first, replace the active `.srm` in `.local/ra-run/saves/mGBA`, then relaunch the same achievement profile. This keeps the earlier in-game save as the recovery point.
+
 ## Probe and achievement lookup
 
 `npm run probe` is a development memory probe. It connects to RetroArch's network command port 55355 by default, or launches the configured ROM there. For a raw read:

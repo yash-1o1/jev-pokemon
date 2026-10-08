@@ -3,21 +3,22 @@ import sharp from 'sharp';
 import type { Observation } from '../game/observe.js';
 import { BUTTONS, type Button } from '../platform/input.js';
 
-export type Action = Button | 'WAIT' | 'NEED_USER_INPUT';
+export type Action = Button | 'WAIT' | 'SAVE_CONFIRMED' | 'NEED_USER_INPUT';
 export interface StepRecord {
   observation: Observation;
   action: Action;
 }
 export type Backend = 'decisions' | 'mock';
 
-const ACTIONS = [...BUTTONS, 'WAIT', 'NEED_USER_INPUT'] as const;
+const ACTIONS = [...BUTTONS, 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'] as const;
 const DESCRIPTIONS: Record<Action, string> = {
   UP: 'Move up', DOWN: 'Move down', LEFT: 'Move left', RIGHT: 'Move right',
   A: 'Confirm or interact', B: 'Cancel or go back',
   START: 'Start or open the menu', SELECT: 'Select',
   L: 'Left shoulder button', R: 'Right shoulder button',
   WAIT: 'Wait for the game to advance or when the next action is unclear',
-  NEED_USER_INPUT: 'Stop: the game requires a personal choice not supplied in gameChoices',
+  SAVE_CONFIRMED: 'Record that the game visibly confirmed an in-game save; press no button',
+  NEED_USER_INPUT: 'Stop when a personal choice is missing or a missable checkpoint needs review',
 };
 
 export function decisionRequest(
@@ -51,7 +52,7 @@ export function decisionRequest(
     questions: [{
       type: 'choice' as const,
       name: 'nextAction',
-      instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input, or NEED_USER_INPUT when a required personal choice is missing.`,
+      instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. Choose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.`,
       choices: ACTIONS.map(value => ({ value, description: DESCRIPTIONS[value] })),
     }],
   };

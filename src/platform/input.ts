@@ -25,9 +25,21 @@ export async function pressButton(button: Button, durationMs = 450, port = INPUT
     const send = (packet: Buffer) => new Promise<void>((resolve, reject) => {
       socket.send(packet, port, '127.0.0.1', error => error ? reject(error) : resolve());
     });
+    // Network RetroPad is UDP. A missed release leaves a direction held and can
+    // make later actions appear ineffective, especially while fast-forwarding.
+    const releaseAll = async () => {
+      for (const candidate of BUTTONS) await send(buttonPacket(candidate, false));
+    };
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await releaseAll();
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
     await send(buttonPacket(button, true));
     await new Promise(resolve => setTimeout(resolve, durationMs));
-    await send(buttonPacket(button, false));
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await releaseAll();
+      if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 30));
+    }
   } finally {
     socket.close();
   }

@@ -64,8 +64,9 @@ test('Decisions request sends image and limits the answer to controller buttons'
   assert.match(request.input[0].content[0].text, /"trainerName":"ALEX"/);
   assert.match(request.questions[0].instructions, /When a start prompt is visible, choose START/);
   assert.deepEqual(request.questions[0].choices.map(choice => choice.value),
-    ['UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT', 'L', 'R', 'WAIT', 'NEED_USER_INPUT']);
+    ['UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT', 'L', 'R', 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT']);
   assert.equal(answerAction([{ type: 'choice', name: 'nextAction', choice: 'START' }]), 'START');
+  assert.equal(answerAction([{ type: 'choice', name: 'nextAction', choice: 'SAVE_CONFIRMED' }]), 'SAVE_CONFIRMED');
   assert.equal(answerAction([{ type: 'choice', name: 'nextAction', choice: 'NEED_USER_INPUT' }]), 'NEED_USER_INPUT');
   assert.throws(() => answerAction([{ type: 'choice', name: 'nextAction', choice: 'RESET' }]));
 });
