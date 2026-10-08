@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadGameChoices, loadProbeConfig } from '../src/platform/config.js';
-import { createDevelopmentProfile, assertDevelopmentProfile } from '../src/platform/dev-profile.js';
+import { createDevelopmentProfile, assertDevelopmentProfile, createAchievementProfile, assertAchievementProfile } from '../src/platform/dev-profile.js';
 import { launchRetroArch } from '../src/platform/launch.js';
 import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton } from '../src/platform/input.js';
@@ -41,7 +41,7 @@ function emeraldPointerAddress(): number {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--help')) {
-    console.log('Usage: npm run play -- [--config FILE] [--game emerald] [--backend decisions|mock] [--steps 10] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
+    console.log('Usage: npm run play -- [--config FILE] [--game emerald] [--backend decisions|mock] [--achievements] [--steps 10] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
     return;
   }
   const configFile = option('--config') ?? 'config.local.json';
@@ -55,6 +55,8 @@ async function main(): Promise<void> {
   if (game && game !== 'emerald') throw new Error(`No decoder for game: ${game}`);
   const backend = option('--backend') ?? 'decisions';
   if (backend !== 'decisions' && backend !== 'mock') throw new Error('Use --backend decisions or --backend mock');
+  const achievements = process.argv.includes('--achievements');
+  if (achievements && backend === 'mock') throw new Error('Achievement runs require the decisions backend');
   if (backend === 'decisions' && !process.env.OPENAI_API_KEY && !process.argv.includes('--check'))
     throw new Error('Set OPENAI_API_KEY for the Decisions API, or use --backend mock for an offline smoke test');
   const goal = option('--goal') ?? 'Play the game and make progress';
@@ -68,10 +70,12 @@ async function main(): Promise<void> {
   const instructions = extraInstructions ? `${baseInstructions}\n\n${extraInstructions}` : baseInstructions;
   const steps = integerOption('--steps', 10, 1, 1000);
   const pointerAddress = game === 'emerald' ? emeraldPointerAddress() : undefined;
-  const profile = createDevelopmentProfile(paths.retroarch);
-  assertDevelopmentProfile(profile);
+  const profile = achievements ? createAchievementProfile(paths.retroarch) : createDevelopmentProfile(paths.retroarch);
+  if (achievements) assertAchievementProfile(profile);
+  else assertDevelopmentProfile(profile);
+  const outputDir = path.resolve(achievements ? '.local/ra-run' : '.local');
   if (process.argv.includes('--check')) {
-    console.log(JSON.stringify({ paths, profile, baseInstructionsFile, extraInstructionsFile, gameChoices, achievements: 'disabled', networkPort: 55356 }, null, 2));
+    console.log(JSON.stringify({ paths, profile, baseInstructionsFile, extraInstructionsFile, gameChoices, achievements: achievements ? 'enabled (hardcore)' : 'disabled', networkPort: 55356 }, null, 2));
     return;
   }
   const observer = new RetroArchObserver('127.0.0.1', 55356);
@@ -82,13 +86,13 @@ async function main(): Promise<void> {
     if (!status.includes(path.parse(paths.rom).name))
       throw new Error(`Development RetroArch is running different content: ${status}`);
   }
-  const logFile = path.resolve('.local/play.jsonl');
+  const logFile = path.join(outputDir, 'play.jsonl');
   const history: StepRecord[] = [];
-  console.log(`Development session ${attached ? 'attached' : 'started'} on port 55356; RetroAchievements disabled; PID ${processId}`);
+  console.log(`${achievements ? 'Achievement' : 'Development'} session ${attached ? 'attached' : 'started'} on port 55356; RetroAchievements ${achievements ? 'enabled (hardcore)' : 'disabled'}; PID ${processId}`);
   try {
     for (let step = 0; step < steps; step++) {
       const observation = await observeGame(observer, game, pointerAddress);
-      const screenshot = await observer.screenshot(path.resolve('.local/screenshots'));
+      const screenshot = await observer.screenshot(path.join(outputDir, 'screenshots'));
       const action = await chooseAction(observation, history, backend, screenshot, goal, instructions, gameChoices);
       const record: StepRecord = { observation, action };
       fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');

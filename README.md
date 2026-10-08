@@ -88,11 +88,17 @@ separate system message.
 
 The default Emerald `gSaveBlock1Ptr` address is `0x03005D8C`, verified against this machine's retail Emerald ROM. For another build, pass `--symbol-file FILE` containing `gSaveBlock1Ptr`, or `--save-block-pointer-address 0x...`. The adapter reports position errors during boot or when the pointer cannot be resolved.
 
-## RetroAchievements isolation
+## RetroAchievements profiles
 
-Autonomous play launches RetroArch with `.local/retroarch-dev.cfg`, built from your installed config. The development profile disables RetroAchievements and Hardcore, clears its credentials, enables network commands on port 55356 and Network RetroPad on port 55420, and uses local save and screenshot folders. It does not edit your installed RetroArch config. Close the development RetroArch window when finished.
+By default, autonomous play launches RetroArch with `.local/retroarch-dev.cfg`, built from your installed config. This development profile disables RetroAchievements and Hardcore, clears its credentials, enables network commands on port 55356 and Network RetroPad on port 55420, and uses local save and screenshot folders. It does not edit your installed RetroArch config. Close the RetroArch window when finished.
 
-[RetroAchievements rules prohibit bots and complex scripts from earning achievements](https://docs.retroachievements.org/guidelines/users/global-leaderboard-and-achievement-hunting-rules.html). Do not use `probe` or `play` to earn achievements. Your regular RetroArch login and achievements settings remain in its own config.
+An explicit `--achievements` run uses `.local/ra-run/retroarch-ra.cfg` with the installed RetroAchievements login and Hardcore enabled. It has separate saves, screenshots, and logs under `.local/ra-run` so the development save cannot skip early achievements. Start from NEW GAME in this profile for a complete set. Keep the installed RetroArch login private; generated profiles remain ignored by Git.
+
+```powershell
+npm run play -- --game emerald --achievements --steps 10
+```
+
+On this machine, press Space once after a new RetroArch session loads to toggle fast-forward. Press it again to return to normal speed. Space is only needed when launching a new session, not when `play` attaches to one already running. For a complete Emerald route, check the live [achievement set and missable filter](https://retroachievements.org/game/668) and the [community guide](https://github.com/RetroAchievements/guides/wiki/(WIP)-Pokemon-Emerald-(Game-Boy-Advance)) before story checkpoints.
 
 ## Probe and achievement lookup
 

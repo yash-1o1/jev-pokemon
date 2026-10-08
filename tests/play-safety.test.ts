@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { makeDevelopmentConfig } from '../src/platform/dev-profile.js';
+import { makeDevelopmentConfig, makeAchievementConfig } from '../src/platform/dev-profile.js';
 import { buttonPacket } from '../src/platform/input.js';
 import { answerAction, decisionRequest } from '../src/decisions/decision.js';
 
@@ -21,6 +21,22 @@ test('development profile disables achievements and clears credentials in repeat
   assert.match(profile, /^cheevos_password = ""$/m);
   assert.match(profile, /^network_remote_base_port = "55420"$/m);
   assert.doesNotMatch(profile, /secret|player/);
+});
+
+test('opt-in achievement profile keeps the login and uses separate saves', () => {
+  const source = [
+    'cheevos_enable = "false"',
+    'cheevos_hardcore_mode_enable = "false"',
+    'cheevos_username = "player"',
+    'cheevos_token = "test-token"',
+  ].join('\n');
+  const profile = makeAchievementConfig(source, 'C:\\ra-saves', 'C:\\ra-screenshots');
+  assert.match(profile, /^cheevos_enable = "true"$/m);
+  assert.match(profile, /^cheevos_hardcore_mode_enable = "true"$/m);
+  assert.match(profile, /^cheevos_username = "player"$/m);
+  assert.match(profile, /^cheevos_token = "test-token"$/m);
+  assert.match(profile, /^savefile_directory = "C:\/ra-saves"$/m);
+  assert.throws(() => makeAchievementConfig('cheevos_username = "player"', 'saves'));
 });
 
 test('Network RetroPad sends the expected 20-byte start button packet', () => {
