@@ -6,6 +6,8 @@ A small RetroArch harness for games you own. Pokémon Emerald on GBA is the firs
 
 The `play` command launches an isolated RetroArch profile, captures screenshots, reads core RAM when available, asks the OpenAI Decisions API to choose one bounded controller button from the screenshot and state, and sends that button through RetroArch's Network RetroPad. Each observation and action is logged to `.local/play.jsonl`. You can also run an offline mock controller loop to check the plumbing without an API key.
 
+During a live play run, use Decisions as the controller. If it stops or stalls, inspect the last screenshot and position, make only the direct inputs needed to get out of the blockage, then resume a bounded Decisions run with a more precise goal. See [AGENTS.md](AGENTS.md) for the session rule.
+
 ```text
 ROM + libretro core in RetroArch
        | screenshots + optional RAM
