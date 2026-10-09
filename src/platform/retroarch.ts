@@ -35,6 +35,10 @@ export class RetroArchObserver {
     return this.send('FAST_FORWARD');
   }
 
+  togglePause(): Promise<void> {
+    return this.send('PAUSE_TOGGLE');
+  }
+
   private send(message: string): Promise<void> {
     return new Promise((resolve, reject) => {
       const socket = dgram.createSocket('udp4');
@@ -47,6 +51,9 @@ export class RetroArchObserver {
   }
 
   async screenshot(directory: string): Promise<string> {
+    // Let the previous screenshot notification expire so controller decisions
+    // are based on an unobstructed game frame.
+    await new Promise(resolve => setTimeout(resolve, 3500));
     const latest = () => fs.readdirSync(directory)
       .filter(name => name.toLowerCase().endsWith('.png'))
       .map(name => ({ file: path.join(directory, name), time: fs.statSync(path.join(directory, name)).mtimeMs }))
@@ -56,7 +63,16 @@ export class RetroArchObserver {
     for (let i = 0; i < 20; i++) {
       await new Promise(resolve => setTimeout(resolve, 100));
       const after = latest();
-      if (after && (!before || after.file !== before.file || after.time > before.time)) return after.file;
+      if (after && (!before || after.file !== before.file || after.time > before.time)) {
+        // RetroArch can create the file before it has finished writing the PNG.
+        // Wait for size and mtime to settle so image decoders don't see a partial file.
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const first = fs.statSync(after.file);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const second = fs.statSync(after.file);
+        if (first.size === second.size && first.mtimeMs === second.mtimeMs)
+          return after.file;
+      }
     }
     throw new Error('RetroArch did not save a screenshot');
   }
