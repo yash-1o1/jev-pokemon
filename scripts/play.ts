@@ -103,11 +103,18 @@ async function main(): Promise<void> {
   const extraInstructionsFile = option('--instructions') ? path.resolve(option('--instructions')!) : undefined;
   const extraInstructions = extraInstructionsFile ? fs.readFileSync(extraInstructionsFile, 'utf8').trim() : '';
   const achievementRulesFile = fileURLToPath(new URL('../instructions/emerald-achievement-rules.md', import.meta.url));
+  const missableLedgerFile = fileURLToPath(new URL('../instructions/emerald-missables.md', import.meta.url));
   const defaultCheckpointFile = fileURLToPath(new URL('../instructions/emerald-early-checkpoint.md', import.meta.url));
   const localCheckpointFile = path.resolve('.local/ra-run/current-checkpoint.md');
   const lastSaveFile = path.resolve('.local/ra-run/last-save-at.txt');
   const checkpointFile = fs.existsSync(localCheckpointFile) ? localCheckpointFile : defaultCheckpointFile;
-  const instructions = [baseInstructions, achievements && game === 'emerald' ? fs.readFileSync(achievementRulesFile, 'utf8').trim() : '', achievements && game === 'emerald' ? fs.readFileSync(checkpointFile, 'utf8').trim() : '', extraInstructions].filter(Boolean).join('\n\n');
+  const instructions = [
+    baseInstructions,
+    achievements && game === 'emerald' ? fs.readFileSync(achievementRulesFile, 'utf8').trim() : '',
+    achievements && game === 'emerald' ? fs.readFileSync(missableLedgerFile, 'utf8').trim() : '',
+    achievements && game === 'emerald' ? fs.readFileSync(checkpointFile, 'utf8').trim() : '',
+    extraInstructions,
+  ].filter(Boolean).join('\n\n');
   const steps = integerOption('--steps', 10, 1, 1000000);
   const buttonDuration = integerOption('--button-ms', 700, 40, 1000);
   const pointerAddress = game === 'emerald' ? emeraldPointerAddress() : undefined;
@@ -120,7 +127,7 @@ async function main(): Promise<void> {
   else assertDevelopmentProfile(profile);
   const outputDir = path.resolve(achievements ? '.local/ra-run' : '.local');
   if (process.argv.includes('--check')) {
-    console.log(JSON.stringify({ paths, profile, baseInstructionsFile, extraInstructionsFile, checkpointFile: achievements && game === 'emerald' ? checkpointFile : undefined, gameChoices, backend, primaryModel: backend === 'hybrid' ? GAME_MODEL : backend === 'responses' ? TERRA_MODEL : 'mock', fallbackModel: backend === 'hybrid' ? TERRA_MODEL : undefined, sharedDailyTokenLimit: backend === 'hybrid' ? DAILY_FREE_TOKEN_LIMIT : undefined, achievements: achievements ? 'enabled (hardcore)' : 'disabled', networkPort: 55356 }, null, 2));
+    console.log(JSON.stringify({ paths, profile, baseInstructionsFile, extraInstructionsFile, missableLedgerFile: achievements && game === 'emerald' ? missableLedgerFile : undefined, checkpointFile: achievements && game === 'emerald' ? checkpointFile : undefined, gameChoices, backend, primaryModel: backend === 'hybrid' ? GAME_MODEL : backend === 'responses' ? TERRA_MODEL : 'mock', fallbackModel: backend === 'hybrid' ? TERRA_MODEL : undefined, sharedDailyTokenLimit: backend === 'hybrid' ? DAILY_FREE_TOKEN_LIMIT : undefined, achievements: achievements ? 'enabled (hardcore)' : 'disabled', networkPort: 55356 }, null, 2));
     return;
   }
   const observer = new RetroArchObserver('127.0.0.1', 55356);
