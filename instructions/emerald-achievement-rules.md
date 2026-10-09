@@ -9,3 +9,4 @@
 - Do not cross a checkpoint boundary until its listed achievements and Scott encounters are verified. If evidence is unclear, choose NEED_USER_INPUT for review rather than guessing.
 - The complete current 28-item missable ledger and the local current checkpoint are included in every Emerald achievement prompt. Review both before each action that could cross a deadline; the local checkpoint adds run-specific status and never replaces the full ledger.
 - Fast-forward is enabled once by the harness when it launches a new RetroArch session. Core screenshots may omit RetroArch's top-right fast-forward indicator, so do not infer its state from an absent icon or press Space again during an attached session.
+- The complete missable ledger and 212-species catch checklist are included in every gameplay prompt; follow both alongside the live RetroAchievements counters.
