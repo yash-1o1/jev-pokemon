@@ -79,11 +79,25 @@ test('Terra Responses request sends image and limits the answer to controller bu
     'Continue through the blocked section.',
     {},
     true,
+    true,
   );
   assert.ok(recoveryRequest.text.format.schema.properties.action.enum.includes('RECOVERY_COMPLETE'));
   assert.match(recoveryRequest.instructions, /NEXT battle begins/i);
   assert.match(recoveryRequest.instructions, /Do not fight that next battle as Terra/i);
-  assert.match(recoveryRequest.instructions, /If a battle is already in progress.*finish that encounter/i);
+  assert.ok(recoveryRequest.text.format.schema.properties.action.enum.includes('RECOVERY_BATTLE_FINISHED'));
+  assert.match(recoveryRequest.instructions, /Do not choose RECOVERY_COMPLETE for that encounter/i);
+  assert.match(recoveryRequest.instructions, /choose RECOVERY_BATTLE_FINISHED/i);
+  const recoveryOverworldRequest = decisionRequest(
+    { status: 'GET_STATUS PLAYING game_boy_advance,Emerald' },
+    [],
+    'data:image/png;base64,AAAA',
+    'Recover to the next battle',
+    'Continue safely.',
+    {},
+    true,
+    false,
+  );
+  assert.match(recoveryOverworldRequest.instructions, /Continue safely through the overworld until the NEXT battle begins/i);
   assert.equal(answerAction('{"action":"RECOVERY_COMPLETE"}', true), 'RECOVERY_COMPLETE');
   assert.throws(() => answerAction('{"action":"RESET"}'));
 });

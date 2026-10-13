@@ -9,7 +9,7 @@ import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton, pressButtons, type Button } from '../src/platform/input.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
 import { observeGame, EMERALD_SAVE_BLOCK_POINTER } from '../src/game/observe.js';
-import { chooseAction, GAME_MODEL, TERRA_MODEL, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
+import { chooseAction, GAME_MODEL, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
 import { DAILY_FREE_TOKEN_LIMIT, DailyQuotaReachedError, millisecondsUntilUtcReset, readDailyUsage, readTotalDailyUsage, REQUEST_TOKEN_RESERVE } from '../src/decisions/quota.js';
 
 function loadLocalApiKey(): void {
@@ -175,6 +175,7 @@ async function main(): Promise<void> {
   const startRecovery = backend === 'hybrid' && process.argv.includes('--recover');
   let controller: Controller = backend === 'mock' ? 'mock' : backend === 'responses' ? 'terra' : startRecovery ? 'terra-recovery' : 'decisions';
   let recoveryActionsLeft = startRecovery ? TERRA_RECOVERY_MAX_ACTIONS : 0;
+  let recoveryBattleActive = startRecovery;
   if (startRecovery) console.log(`--recover requested; Terra will continue this recovery episode for up to ${recoveryActionsLeft} actions.`);
   let ineffectiveActionStreak = 0;
   let lastRunRecord: StepRecord | undefined;
@@ -205,6 +206,7 @@ async function main(): Promise<void> {
         if (controller === 'decisions' && ineffectiveActionStreak >= DECISIONS_STALL_ACTIONS) {
           controller = 'terra-recovery';
           recoveryActionsLeft = TERRA_RECOVERY_MAX_ACTIONS;
+          recoveryBattleActive = true;
           console.log(`Progress watchdog detected ${ineffectiveActionStreak} ineffective actions; Terra is taking a recovery episode of up to ${TERRA_RECOVERY_MAX_ACTIONS} actions, then will hand back at the next battle.`);
         }
       }
@@ -214,9 +216,9 @@ async function main(): Promise<void> {
         if (status.includes(' PLAYING ')) await observer.togglePause();
         return;
       }
-      let action;
+      let action: Action;
       try {
-        action = await chooseAction(observation, history, backend, screenshot, stepGoal, instructions, gameChoices, controller);
+        action = await chooseAction(observation, history, backend, screenshot, stepGoal, instructions, gameChoices, controller, recoveryBattleActive);
       } catch (error) {
         if (!(error instanceof DailyQuotaReachedError)) throw error;
         await waitForDailyQuotaReset(observer);
@@ -232,12 +234,25 @@ async function main(): Promise<void> {
         const total = readTotalDailyUsage();
         console.log(`Daily token usage: ${total.usedTokens.toLocaleString()} / ${DAILY_FREE_TOKEN_LIMIT.toLocaleString()} tokens across ${total.requestCount} requests.`);
       }
+      if (controller === 'terra-recovery' && recoveryBattleActive && action === 'RECOVERY_COMPLETE') {
+        console.log('Rejected premature recovery handoff: Terra must first verify that the battle active at recovery start has ended.');
+        action = 'WAIT';
+      }
+      if (controller === 'terra-recovery' && !recoveryBattleActive && action === 'RECOVERY_BATTLE_FINISHED') {
+        console.log('Ignored stale battle-finished marker; no opening battle was active at recovery start.');
+        action = 'WAIT';
+      }
       const record: StepRecord = { observation, action };
       fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
       console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
       history.push(record);
       lastRunRecord = record;
       lastRunScreenshotHash = screenshotHash;
+      if (action === 'RECOVERY_BATTLE_FINISHED') {
+        recoveryBattleActive = false;
+        console.log('Terra confirmed the earlier battle ended and the overworld is visible; recovery continues until the next battle.');
+        continue;
+      }
       if (action === 'RECOVERY_COMPLETE') {
         controller = 'decisions';
         recoveryActionsLeft = 0;
