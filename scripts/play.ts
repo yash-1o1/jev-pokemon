@@ -20,7 +20,7 @@ function loadLocalApiKey(): void {
 
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 const DECISIONS_STALL_ACTIONS = 6;
-const TERRA_RECOVERY_MAX_ACTIONS = 80;
+const TERRA_RECOVERY_MAX_ACTIONS = 120;
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
   const quotaDate = readDailyUsage().dateUtc;
