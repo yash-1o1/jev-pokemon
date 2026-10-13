@@ -78,7 +78,7 @@ function emeraldPointerAddress(): number {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--help')) {
-    console.log('Usage: npm run play -- [--config FILE] [--retroarch-profile FILE] [--game emerald] [--backend hybrid|responses|mock] [--achievements] [--resume] [--recover] [--steps 10] [--button-ms 700] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
+    console.log('Usage: npm run play -- [--config FILE] [--retroarch-profile FILE] [--game emerald] [--backend hybrid|responses|mock] [--achievements] [--resume] [--recover] [--recovery-overworld] [--steps 10] [--button-ms 700] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
     return;
   }
   const configFile = option('--config') ?? 'config.local.json';
@@ -175,8 +175,9 @@ async function main(): Promise<void> {
   const startRecovery = backend === 'hybrid' && process.argv.includes('--recover');
   let controller: Controller = backend === 'mock' ? 'mock' : backend === 'responses' ? 'terra' : startRecovery ? 'terra-recovery' : 'decisions';
   let recoveryActionsLeft = startRecovery ? TERRA_RECOVERY_MAX_ACTIONS : 0;
-  let recoveryBattleActive = startRecovery;
+  let recoveryBattleActive = startRecovery && !process.argv.includes('--recovery-overworld');
   if (startRecovery) console.log(`--recover requested; Terra will continue this recovery episode for up to ${recoveryActionsLeft} actions.`);
+  if (startRecovery && !recoveryBattleActive) console.log('--recovery-overworld requested; the current screen was verified as overworld, so Terra will continue toward the next battle.');
   let ineffectiveActionStreak = 0;
   let lastRunRecord: StepRecord | undefined;
   let lastRunScreenshotHash: string | undefined;
