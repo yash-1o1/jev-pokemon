@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadGameChoices, loadProbeConfig } from '../src/platform/config.js';
 import { createDevelopmentProfile, assertDevelopmentProfile, createAchievementProfile, assertAchievementProfile } from '../src/platform/dev-profile.js';
@@ -18,6 +19,8 @@ function loadLocalApiKey(): void {
 }
 
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
+const DECISIONS_STALL_ACTIONS = 6;
+const TERRA_RECOVERY_MAX_ACTIONS = 80;
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
   const quotaDate = readDailyUsage().dateUtc;
@@ -75,7 +78,7 @@ function emeraldPointerAddress(): number {
 
 async function main(): Promise<void> {
   if (process.argv.includes('--help')) {
-    console.log('Usage: npm run play -- [--config FILE] [--retroarch-profile FILE] [--game emerald] [--backend hybrid|responses|mock] [--achievements] [--steps 10] [--button-ms 700] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
+    console.log('Usage: npm run play -- [--config FILE] [--retroarch-profile FILE] [--game emerald] [--backend hybrid|responses|mock] [--achievements] [--resume] [--recover] [--steps 10] [--button-ms 700] [--goal TEXT] [--instructions EXTRA_FILE] [--symbol-file FILE | --save-block-pointer-address ADDRESS] [--check]');
     return;
   }
   const configFile = option('--config') ?? 'config.local.json';
@@ -151,6 +154,12 @@ async function main(): Promise<void> {
     if (status.includes(' PAUSED ')) await observer.togglePause();
     fs.rmSync(quotaPauseMarker, { force: true });
     console.log('UTC day rolled over since the shared-cap pause; resumed the existing RetroArch session.');
+  } else if (attached && process.argv.includes('--resume') && !quotaPauseDate) {
+    const status = await observer.status();
+    if (status.includes(' PAUSED ')) {
+      await observer.togglePause();
+      console.log('--resume requested; resumed the attached RetroArch game.');
+    }
   }
   const logFile = path.join(outputDir, 'play.jsonl');
   const history: StepRecord[] = fs.existsSync(logFile)
@@ -163,14 +172,19 @@ async function main(): Promise<void> {
       }
     })
     : [];
-  let controller: Controller = backend === 'mock' ? 'mock' : backend === 'responses' ? 'terra' : 'decisions';
-  let recoveryActionsLeft = 0;
+  const startRecovery = backend === 'hybrid' && process.argv.includes('--recover');
+  let controller: Controller = backend === 'mock' ? 'mock' : backend === 'responses' ? 'terra' : startRecovery ? 'terra-recovery' : 'decisions';
+  let recoveryActionsLeft = startRecovery ? TERRA_RECOVERY_MAX_ACTIONS : 0;
+  if (startRecovery) console.log(`--recover requested; Terra will continue this recovery episode for up to ${recoveryActionsLeft} actions.`);
   let ineffectiveActionStreak = 0;
+  let lastRunRecord: StepRecord | undefined;
+  let lastRunScreenshotHash: string | undefined;
   console.log(`${achievements ? 'Achievement' : 'Development'} session ${attached ? 'attached' : 'started'} on port 55356; controller ${backend === 'hybrid' ? `${GAME_MODEL} primary, ${TERRA_MODEL} stall recovery` : backend === 'responses' ? TERRA_MODEL : 'mock'}; RetroAchievements ${achievements ? 'enabled (hardcore)' : 'disabled'}; PID ${processId}`);
   try {
     for (let step = 0; step < steps; step++) {
       const observation = await observeGame(observer, game, pointerAddress);
       const screenshot = await observer.screenshot(path.join(outputDir, 'screenshots'));
+      const screenshotHash = createHash('sha256').update(fs.readFileSync(screenshot)).digest('hex');
       let stepGoal = goal;
       if (achievements && game === 'emerald') {
         const savedAt = fs.existsSync(lastSaveFile) ? Date.parse(fs.readFileSync(lastSaveFile, 'utf8').trim()) : NaN;
@@ -179,21 +193,23 @@ async function main(): Promise<void> {
           stepGoal += minutes >= 30 ? ` The last confirmed in-game save was ${minutes} minutes ago: save now before further progression.` : ` Last confirmed in-game save was ${minutes} minutes ago; save again by 30 minutes or before any missable event.`;
         } else stepGoal += ' No confirmed in-game save is recorded yet; save as soon as the game allows it.';
       }
-      if (backend === 'hybrid' && history.length > 0) {
-        const previous = history[history.length - 1];
+      if (backend === 'hybrid' && lastRunRecord) {
+        const previous = lastRunRecord;
         const directional = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT'].includes(previous.action);
         const oldPos = previous.observation.position;
         const newPos = observation.position;
         const stayedPut = directional && oldPos && newPos && oldPos.x === newPos.x && oldPos.y === newPos.y;
-        ineffectiveActionStreak = stayedPut ? ineffectiveActionStreak + 1 : 0;
-        if (controller === 'decisions' && (ineffectiveActionStreak >= 3 || (history.slice(-3).length === 3 && history.slice(-3).every(item => item.action === previous.action)))) {
+        const advancesState = !['WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'].includes(previous.action);
+        const unchangedScreen = advancesState && lastRunScreenshotHash === screenshotHash;
+        ineffectiveActionStreak = stayedPut || unchangedScreen ? ineffectiveActionStreak + 1 : 0;
+        if (controller === 'decisions' && ineffectiveActionStreak >= DECISIONS_STALL_ACTIONS) {
           controller = 'terra-recovery';
-          recoveryActionsLeft = 24;
-          console.log('Progress watchdog detected repeated ineffective actions; Terra is taking a short recovery episode.');
+          recoveryActionsLeft = TERRA_RECOVERY_MAX_ACTIONS;
+          console.log(`Progress watchdog detected ${ineffectiveActionStreak} ineffective actions; Terra is taking a recovery episode of up to ${TERRA_RECOVERY_MAX_ACTIONS} actions, then will hand back at the next battle.`);
         }
       }
       if (controller === 'terra-recovery' && recoveryActionsLeft <= 0) {
-        console.log('Terra did not identify a safe checkpoint within the recovery limit. Pausing for review.');
+        console.log('Terra did not reach the next battle within the recovery limit. Pausing for review without advancing the game further.');
         const status = await observer.status();
         if (status.includes(' PLAYING ')) await observer.togglePause();
         return;
@@ -220,11 +236,13 @@ async function main(): Promise<void> {
       fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
       console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
       history.push(record);
+      lastRunRecord = record;
+      lastRunScreenshotHash = screenshotHash;
       if (action === 'RECOVERY_COMPLETE') {
         controller = 'decisions';
         recoveryActionsLeft = 0;
         ineffectiveActionStreak = 0;
-        console.log('Terra verified a safe recovery checkpoint; returning gameplay control to Decisions.');
+        console.log('Terra verified that the next battle has begun; returning gameplay control to Decisions before the battle action.');
         continue;
       }
       if (controller === 'terra-recovery' && recoveryActionsLeft > 0) recoveryActionsLeft--;

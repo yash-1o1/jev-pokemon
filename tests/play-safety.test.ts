@@ -81,6 +81,9 @@ test('Terra Responses request sends image and limits the answer to controller bu
     true,
   );
   assert.ok(recoveryRequest.text.format.schema.properties.action.enum.includes('RECOVERY_COMPLETE'));
+  assert.match(recoveryRequest.instructions, /NEXT battle begins/i);
+  assert.match(recoveryRequest.instructions, /Do not fight that next battle as Terra/i);
+  assert.match(recoveryRequest.instructions, /If a battle is already in progress.*finish that encounter/i);
   assert.equal(answerAction('{"action":"RECOVERY_COMPLETE"}', true), 'RECOVERY_COMPLETE');
   assert.throws(() => answerAction('{"action":"RESET"}'));
 });

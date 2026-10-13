@@ -29,7 +29,7 @@ const DESCRIPTIONS: Record<Action, string> = {
   WAIT: 'Wait for the game to advance or when the next action is unclear',
   SAVE_CONFIRMED: 'Record that the game visibly confirmed an in-game save; press no button',
   NEED_USER_INPUT: 'Stop when a personal choice is missing or a missable checkpoint needs review',
-  RECOVERY_COMPLETE: 'Recovery reached the next safe checkpoint; hand control back to Decisions without pressing a button',
+  RECOVERY_COMPLETE: 'The next battle has just begun and its first battle command is visible; hand control back to Decisions without pressing a button',
 };
 
 export function decisionRequest(
@@ -61,7 +61,7 @@ export function decisionRequest(
   const actionGuide = allowedActions.map(action => `${action}: ${DESCRIPTIONS[action]}`).join('\n');
   return {
     model: TERRA_MODEL,
-    instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. For recent directional actions, compare position with nextPosition. If the screenshot shows the player turned but still in place, repeat that direction once to move; after the repeat, try a different direction if the position remains unchanged. Return one action from this list:\n${actionGuide}\nChoose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.${recovery ? ' During this recovery episode, keep playing through the blocked segment and any battle already in progress. Choose RECOVERY_COMPLETE only after a safe, visibly verified checkpoint is reached; do not hand back mid-battle or mid-menu.' : ''}`,
+    instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. For recent directional actions, compare position with nextPosition. If the screenshot shows the player turned but still in place, repeat that direction once to move; after the repeat, try a different direction if the position remains unchanged. Return one action from this list:\n${actionGuide}\nChoose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.${recovery ? ' Recovery handoff policy: Terra temporarily takes over only because Decisions has stalled. Get out of the blocked situation and continue safely through the overworld until the NEXT battle begins. If a battle is already in progress when recovery starts, finish that encounter safely, return to the overworld, and continue until the following battle begins. As soon as the next battle intro or its first battle command menu is clearly visible, choose RECOVERY_COMPLETE immediately and press no button; Decisions will take over at that battle. Do not fight that next battle as Terra. Do not choose RECOVERY_COMPLETE in the overworld, during a battle already in progress, or on an unclear screen. If progress requires an irreversible or missable choice that cannot be verified, choose NEED_USER_INPUT.' : ''}`,
     input: [{
       role: 'user' as const,
       content: [
