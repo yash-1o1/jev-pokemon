@@ -9,7 +9,7 @@ import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton, pressButtons, type Button } from '../src/platform/input.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
 import { observeGame, EMERALD_SAVE_BLOCK_POINTER } from '../src/game/observe.js';
-import { chooseAction, GAME_MODEL, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
+import { chooseAction, GAME_MODEL, recoveryLimitOutcome, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
 import { DAILY_FREE_TOKEN_LIMIT, DailyQuotaReachedError, millisecondsUntilUtcReset, readDailyUsage, readTotalDailyUsage, REQUEST_TOKEN_RESERVE } from '../src/decisions/quota.js';
 
 function loadLocalApiKey(): void {
@@ -212,10 +212,15 @@ async function main(): Promise<void> {
         }
       }
       if (controller === 'terra-recovery' && recoveryActionsLeft <= 0) {
-        console.log('Terra did not reach the next battle within the recovery limit. Pausing for review without advancing the game further.');
-        const status = await observer.status();
-        if (status.includes(' PLAYING ')) await observer.togglePause();
-        return;
+        if (recoveryLimitOutcome(recoveryBattleActive) === 'pause-for-review') {
+          console.log('Terra reached the recovery limit before confirming that the active battle ended. Pausing for review without advancing the game further.');
+          const status = await observer.status();
+          if (status.includes(' PLAYING ')) await observer.togglePause();
+          return;
+        }
+        controller = 'decisions';
+        ineffectiveActionStreak = 0;
+        console.log('Terra reached the recovery limit in the overworld without reaching the next battle; returning control to Decisions for a fresh route attempt. Terra can take over again if the progress watchdog detects another stall.');
       }
       let action: Action;
       try {

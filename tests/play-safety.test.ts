@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { makeDevelopmentConfig, makeAchievementConfig } from '../src/platform/dev-profile.js';
 import { buttonPacket } from '../src/platform/input.js';
-import { answerAction, decisionRequest, decisionsRequest } from '../src/decisions/decision.js';
+import { answerAction, decisionRequest, decisionsRequest, recoveryLimitOutcome } from '../src/decisions/decision.js';
 
 test('development profile disables achievements and clears credentials in repeated settings', () => {
   const source = [
@@ -116,4 +116,9 @@ test('Decisions request uses GPT-6 Luna with image input and a bounded controlle
   assert.equal(request.questions[0].type, 'choice');
   assert.equal(request.questions[0].choices.length, 17);
   assert.match(request.input[0].content[0].text, /trainerName/);
+});
+
+test('Terra recovery limit returns to Decisions only from the overworld', () => {
+  assert.equal(recoveryLimitOutcome(false), 'return-to-decisions');
+  assert.equal(recoveryLimitOutcome(true), 'pause-for-review');
 });

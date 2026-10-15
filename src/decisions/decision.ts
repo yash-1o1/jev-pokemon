@@ -12,6 +12,11 @@ export interface StepRecord {
 }
 export type Backend = 'hybrid' | 'responses' | 'mock';
 export type Controller = 'decisions' | 'terra' | 'terra-recovery' | 'mock';
+export type RecoveryLimitOutcome = 'pause-for-review' | 'return-to-decisions';
+
+export function recoveryLimitOutcome(recoveryBattleActive: boolean): RecoveryLimitOutcome {
+  return recoveryBattleActive ? 'pause-for-review' : 'return-to-decisions';
+}
 
 export const GAME_MODEL = 'gpt-6-luna';
 export const TERRA_MODEL = 'gpt-5.6-terra';
