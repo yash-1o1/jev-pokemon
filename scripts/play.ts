@@ -9,7 +9,7 @@ import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton, pressButtons, type Button } from '../src/platform/input.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
 import { observeGame, EMERALD_SAVE_BLOCK_POINTER } from '../src/game/observe.js';
-import { chooseAction, GAME_MODEL, recoveryLimitOutcome, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
+import { chooseAction, consumeRecoveryAction, GAME_MODEL, recoveryLimitOutcome, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
 import { DAILY_FREE_TOKEN_LIMIT, DailyQuotaReachedError, millisecondsUntilUtcReset, readDailyUsage, readTotalDailyUsage, REQUEST_TOKEN_RESERVE } from '../src/decisions/quota.js';
 
 function loadLocalApiKey(): void {
@@ -20,7 +20,7 @@ function loadLocalApiKey(): void {
 
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 const DECISIONS_STALL_ACTIONS = 6;
-const TERRA_RECOVERY_MAX_ACTIONS = 120;
+const TERRA_RECOVERY_MAX_ACTIONS = 60;
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
   const quotaDate = readDailyUsage().dateUtc;
@@ -223,6 +223,7 @@ async function main(): Promise<void> {
         console.log('Terra reached the recovery limit in the overworld without reaching the next battle; returning control to Decisions for a fresh route attempt. Terra can take over again if the progress watchdog detects another stall.');
       }
       let action: Action;
+      const actionController = controller;
       try {
         action = await chooseAction(observation, history, backend, screenshot, stepGoal, instructions, gameChoices, controller, recoveryBattleActive);
       } catch (error) {
@@ -231,6 +232,7 @@ async function main(): Promise<void> {
         step--;
         continue;
       }
+      recoveryActionsLeft = consumeRecoveryAction(actionController, recoveryActionsLeft);
       if (backend === 'hybrid') {
         const model = controller === 'decisions' ? GAME_MODEL : TERRA_MODEL;
         const usage = readDailyUsage(model);
@@ -266,7 +268,6 @@ async function main(): Promise<void> {
         console.log('Terra verified that the next battle has begun; returning gameplay control to Decisions before the battle action.');
         continue;
       }
-      if (controller === 'terra-recovery' && recoveryActionsLeft > 0) recoveryActionsLeft--;
       if (action === 'NEED_USER_INPUT') {
         const status = await observer.status();
         if (status.includes(' PLAYING ')) await observer.togglePause();

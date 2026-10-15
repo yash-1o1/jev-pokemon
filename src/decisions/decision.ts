@@ -18,6 +18,10 @@ export function recoveryLimitOutcome(recoveryBattleActive: boolean): RecoveryLim
   return recoveryBattleActive ? 'pause-for-review' : 'return-to-decisions';
 }
 
+export function consumeRecoveryAction(controller: Controller, actionsLeft: number): number {
+  return controller === 'terra-recovery' ? Math.max(0, actionsLeft - 1) : actionsLeft;
+}
+
 export const GAME_MODEL = 'gpt-6-luna';
 export const TERRA_MODEL = 'gpt-5.6-terra';
 const ACTIONS = [...BUTTONS, 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT', 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'] as const;
