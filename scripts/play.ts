@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
 import { loadGameChoices, loadProbeConfig } from '../src/platform/config.js';
 import { createDevelopmentProfile, assertDevelopmentProfile, createAchievementProfile, assertAchievementProfile } from '../src/platform/dev-profile.js';
@@ -9,6 +8,7 @@ import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton, pressButtons, type Button } from '../src/platform/input.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
 import { observeGame, EMERALD_SAVE_BLOCK_POINTER, type Observation } from '../src/game/observe.js';
+import { screenshotProgressSignal } from '../src/game/progress.js';
 import { actionFailedToProgress, chooseAction, consumeRecoveryAction, GAME_MODEL, recoveryLimitReached, sameGamePosition, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
 import { DAILY_FREE_TOKEN_LIMIT, DailyQuotaReachedError, millisecondsUntilUtcReset, readDailyUsage, readTotalDailyUsage, REQUEST_TOKEN_RESERVE } from '../src/decisions/quota.js';
 
@@ -21,18 +21,6 @@ function loadLocalApiKey(): void {
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 const DECISIONS_STALL_ACTIONS = 6;
 const TERRA_RECOVERY_MAX_ACTIONS = 60;
-
-async function screenshotProgressSignal(screenshot: string): Promise<Buffer> {
-  const metadata = await sharp(screenshot).metadata();
-  if (!metadata.width || !metadata.height) throw new Error(`Cannot read screenshot dimensions: ${screenshot}`);
-  const top = Math.floor(metadata.height * 0.68);
-  return sharp(screenshot)
-    .extract({ left: 0, top, width: metadata.width, height: metadata.height - top })
-    .resize({ width: 160, height: 50, fit: 'fill' })
-    .greyscale()
-    .raw()
-    .toBuffer();
-}
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
   const quotaDate = readDailyUsage().dateUtc;

@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import sharp from 'sharp';
 import { makeDevelopmentConfig, makeAchievementConfig } from '../src/platform/dev-profile.js';
 import { buttonPacket } from '../src/platform/input.js';
 import { actionFailedToProgress, answerAction, consumeRecoveryAction, decisionRequest, decisionsRequest, recoveryLimitReached, sameGamePosition, sameVisibleUi } from '../src/decisions/decision.js';
+import { screenshotProgressSignal } from '../src/game/progress.js';
 
 test('development profile disables achievements and clears credentials in repeated settings', () => {
   const source = [
@@ -146,4 +148,29 @@ test('stall detection catches repeated interactions despite sprite animation and
   assert.equal(actionFailedToProgress('DOWN', position, position, stableDialogue, nextDialogue), true);
   assert.equal(actionFailedToProgress('DOWN', position, { ...position, y: 9 }, stableDialogue, stableDialogue), false);
   assert.equal(actionFailedToProgress('WAIT', position, position, stableDialogue, stableDialogue), false);
+});
+
+test('progress watchdog ignores dialogue-box text changes but detects gameplay scene changes', async () => {
+  const base = sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 80, g: 80, b: 80 } } });
+  const baselinePath = '.local/progress-baseline.png';
+  const dialoguePath = '.local/progress-dialogue.png';
+  const scenePath = '.local/progress-scene.png';
+  await base.png().toFile(baselinePath);
+  await sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 80, g: 80, b: 80 } } })
+    .composite([{ input: { create: { width: 100, height: 25, channels: 3, background: { r: 220, g: 220, b: 220 } } }, top: 75, left: 0 }])
+    .png().toFile(dialoguePath);
+  await sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 80, g: 80, b: 80 } } })
+    .composite([{ input: { create: { width: 45, height: 30, channels: 3, background: { r: 220, g: 220, b: 220 } } }, top: 10, left: 10 }])
+    .png().toFile(scenePath);
+
+  try {
+    const baseline = await screenshotProgressSignal(baselinePath);
+    const dialogueOnly = await screenshotProgressSignal(dialoguePath);
+    const sceneChanged = await screenshotProgressSignal(scenePath);
+    assert.equal(sameVisibleUi(baseline, dialogueOnly), true);
+    assert.equal(sameVisibleUi(baseline, sceneChanged), false);
+  } finally {
+    const fs = await import('node:fs');
+    for (const file of [baselinePath, dialoguePath, scenePath]) fs.rmSync(file, { force: true });
+  }
 });
