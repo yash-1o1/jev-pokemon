@@ -8,7 +8,7 @@ import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton, pressButtons, type Button } from '../src/platform/input.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
 import { observeGame, EMERALD_SAVE_BLOCK_POINTER, type Observation } from '../src/game/observe.js';
-import { screenshotProgressSignal } from '../src/game/progress.js';
+import { screenshotActionSignal } from '../src/game/progress.js';
 import { actionFailedToProgress, chooseAction, consumeRecoveryAction, GAME_MODEL, recoveryLimitReached, sameGamePosition, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
 import { DAILY_FREE_TOKEN_LIMIT, DailyQuotaReachedError, millisecondsUntilUtcReset, readDailyUsage, readTotalDailyUsage, REQUEST_TOKEN_RESERVE } from '../src/decisions/quota.js';
 
@@ -185,13 +185,13 @@ async function main(): Promise<void> {
   if (startRecovery) console.log('Recovery start screen will be inspected directly; Terra will hand back immediately if a battle is already visible.');
   let ineffectiveActionStreak = 0;
   let lastRunRecord: StepRecord | undefined;
-  let lastRunProgressSignal: Buffer | undefined;
+  let lastRunActionSignal: Buffer | undefined;
   console.log(`${achievements ? 'Achievement' : 'Development'} session ${attached ? 'attached' : 'started'} on port 55356; controller ${backend === 'hybrid' ? `${GAME_MODEL} primary, ${TERRA_MODEL} stall recovery` : backend === 'responses' ? TERRA_MODEL : 'mock'}; RetroAchievements ${achievements ? 'enabled (hardcore)' : 'disabled'}; PID ${processId}`);
   try {
     for (let step = 0; step < steps; step++) {
       const observation = await observeGame(observer, game, pointerAddress);
       const screenshot = await observer.screenshot(path.join(outputDir, 'screenshots'));
-      const progressSignal = await screenshotProgressSignal(screenshot);
+      const actionSignal = await screenshotActionSignal(screenshot);
       if (controller === 'terra-recovery' && !recoveryEpisodeStartPosition)
         recoveryEpisodeStartPosition = observation.position;
       if (failedRecoveryPosition && !sameGamePosition(failedRecoveryPosition, observation.position)) {
@@ -215,9 +215,10 @@ async function main(): Promise<void> {
           previous.action,
           previous.observation.position,
           observation.position,
-          lastRunProgressSignal,
-          progressSignal,
+          lastRunActionSignal,
+          actionSignal,
         );
+        previous.ineffective = ineffective;
         ineffectiveActionStreak = ineffective ? ineffectiveActionStreak + 1 : 0;
         if (controller === 'decisions' && ineffectiveActionStreak >= DECISIONS_STALL_ACTIONS) {
           controller = 'terra-recovery';
@@ -291,7 +292,7 @@ async function main(): Promise<void> {
       console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
       history.push(record);
       lastRunRecord = record;
-      lastRunProgressSignal = progressSignal;
+      lastRunActionSignal = actionSignal;
       if (action === 'RECOVERY_BATTLE_FINISHED') {
         recoveryBattleActive = false;
         console.log('Terra confirmed the earlier battle ended and the overworld is visible; recovery continues until the next battle.');

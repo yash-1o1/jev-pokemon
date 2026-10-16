@@ -9,6 +9,8 @@ export type Action = Button | 'RUN_UP' | 'RUN_DOWN' | 'RUN_LEFT' | 'RUN_RIGHT' |
 export interface StepRecord {
   observation: Observation;
   action: Action;
+  /** Whether the last application of this action had no visible effect. */
+  ineffective?: boolean;
 }
 export type Backend = 'hybrid' | 'responses' | 'mock';
 export type Controller = 'decisions' | 'terra' | 'terra-recovery' | 'mock';
@@ -49,7 +51,8 @@ export function actionFailedToProgress(
   previousUi: Uint8Array | undefined,
   currentUi: Uint8Array | undefined,
 ): boolean {
-  if (action === 'WAIT' || action === 'SAVE_CONFIRMED' || action === 'NEED_USER_INPUT') return false;
+  if (action === 'WAIT' || action === 'SAVE_CONFIRMED' || action === 'NEED_USER_INPUT' ||
+      action === 'RECOVERY_BATTLE_FINISHED' || action === 'RECOVERY_COMPLETE') return false;
   const directional = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT'].includes(action);
   if (directional && previousPosition && currentPosition) return sameGamePosition(previousPosition, currentPosition);
   return sameVisibleUi(previousUi, currentUi);
@@ -98,6 +101,7 @@ export function decisionRequest(
         action,
         position: recordedObservation.position ?? null,
         nextPosition: nextPosition ?? null,
+        ineffective: recent[index].ineffective ?? null,
       };
     }),
   };
@@ -105,7 +109,7 @@ export function decisionRequest(
   const actionGuide = allowedActions.map(action => `${action}: ${DESCRIPTIONS[action]}`).join('\n');
   return {
     model: TERRA_MODEL,
-    instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. For recent directional actions, compare position with nextPosition. If the screenshot shows the player turned but still in place, repeat that direction once to move; after the repeat, try a different direction if the position remains unchanged. Do not repeat A or another interaction when the dialogue/menu has not visibly changed; after two presses without a visible change, choose a different approach. Do not repeat a direction more than twice when the map position remains unchanged. Return one action from this list:\n${actionGuide}\nChoose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.${recovery ? ` Recovery handoff policy: Terra temporarily takes over only because Decisions has stalled. ${recoveryBattleActive ? 'A battle may have been in progress when recovery started. If the current screenshot is already a battle, choose RECOVERY_COMPLETE immediately without pressing a button so Decisions takes it over. Otherwise continue safely through the overworld until the NEXT battle begins.' : 'Continue safely through the overworld until the NEXT battle begins.'} As soon as a battle intro or its first battle command menu is clearly visible, choose RECOVERY_COMPLETE immediately and press no button; Decisions will take over at that battle. Do not fight a battle as Terra. If progress requires an irreversible or missable choice that cannot be verified, choose NEED_USER_INPUT.` : ''}`,
+    instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. Use recentActions.ineffective: true means the previous input caused no visible response. Do not repeat a visibly ineffective interaction; change the interaction or route. For recent directional actions, compare position with nextPosition. If the screenshot shows the player turned but still in place, repeat that direction once to move; after the repeat, try a different direction if the position remains unchanged. Do not repeat a direction more than twice when the map position remains unchanged. Return one action from this list:\n${actionGuide}\nChoose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.${recovery ? ` Recovery handoff policy: Terra temporarily takes over only because Decisions has stalled. ${recoveryBattleActive ? 'A battle may have been in progress when recovery started. If the current screenshot is already a battle, choose RECOVERY_COMPLETE immediately without pressing a button so Decisions takes it over. Otherwise continue safely through the overworld until the NEXT battle begins.' : 'Continue safely through the overworld until the NEXT battle begins.'} As soon as a battle intro or its first battle command menu is clearly visible, choose RECOVERY_COMPLETE immediately and press no button; Decisions will take over at that battle. Do not fight a battle as Terra. If progress requires an irreversible or missable choice that cannot be verified, choose NEED_USER_INPUT.` : ''}`,
     input: [{
       role: 'user' as const,
       content: [
@@ -145,16 +149,17 @@ export function decisionsRequest(
     game: observation.status,
     position: observation.position ?? null,
     positionError: observation.positionError ?? null,
-    recentActions: history.slice(-8).map(({ action, observation: recordedObservation }) => ({
+    recentActions: history.slice(-8).map(({ action, observation: recordedObservation, ineffective }) => ({
       action,
       position: recordedObservation.position ?? null,
+      ineffective: ineffective ?? null,
     })),
   };
   const actionGuide = ACTIONS.map(action => `${action}: ${DESCRIPTIONS[action]}`).join('\n');
   return {
     model: GAME_MODEL,
     input: [{ role: 'user' as const, content: [
-      { type: 'input_text' as const, text: `${baseInstructions.trim()}\n\nChoose one controller action from the listed options.\n${actionGuide}\n\nCurrent evidence: ${JSON.stringify(evidence)}` },
+      { type: 'input_text' as const, text: `${baseInstructions.trim()}\n\nChoose one controller action from the listed options. Use recentActions.ineffective: true means the previous input caused no visible response; do not repeat an ineffective interaction and choose a different route after ineffective movement.\n${actionGuide}\n\nCurrent evidence: ${JSON.stringify(evidence)}` },
       { type: 'input_image' as const, image_url: imageUrl, detail: 'high' as const },
     ] }],
     questions: [{

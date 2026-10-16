@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { makeDevelopmentConfig, makeAchievementConfig } from '../src/platform/dev-profile.js';
 import { buttonPacket } from '../src/platform/input.js';
 import { actionFailedToProgress, answerAction, consumeRecoveryAction, decisionRequest, decisionsRequest, recoveryLimitReached, sameGamePosition, sameVisibleUi } from '../src/decisions/decision.js';
-import { screenshotProgressSignal } from '../src/game/progress.js';
+import { screenshotActionSignal, screenshotProgressSignal } from '../src/game/progress.js';
 
 test('development profile disables achievements and clears credentials in repeated settings', () => {
   const source = [
@@ -56,7 +56,7 @@ test('Network RetroPad sends the expected 20-byte start button packet', () => {
 test('Terra Responses request sends image and limits the answer to controller buttons', () => {
   const request = decisionRequest(
     { status: 'GET_STATUS PLAYING game_boy_advance,Emerald' },
-    [],
+    [{ observation: { status: 'GET_STATUS PLAYING game_boy_advance,Emerald', position: { x: 2, y: 8 } }, action: 'A', ineffective: true }],
     'data:image/png;base64,AAAA',
     'Advance past the title screen',
     'When a start prompt is visible, choose START.',
@@ -66,6 +66,7 @@ test('Terra Responses request sends image and limits the answer to controller bu
   assert.equal(request.input[0].content[1].type, 'input_image');
   assert.equal(request.text.format.type, 'json_schema');
   assert.match(request.instructions, /When a start prompt is visible, choose START/);
+  assert.match(request.input[0].content[0].text, /"ineffective":true/);
   assert.match(request.input[0].content[0].text, /"trainerName":"ALEX"/);
   assert.deepEqual(request.text.format.schema.properties.action.enum,
     ['UP', 'DOWN', 'LEFT', 'RIGHT', 'A', 'B', 'START', 'SELECT', 'L', 'R', 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT', 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT']);
@@ -75,7 +76,7 @@ test('Terra Responses request sends image and limits the answer to controller bu
   assert.throws(() => answerAction('{"action":"RECOVERY_COMPLETE"}'));
   const recoveryRequest = decisionRequest(
     { status: 'GET_STATUS PLAYING game_boy_advance,Emerald' },
-    [],
+    [{ observation: { status: 'GET_STATUS PLAYING game_boy_advance,Emerald', position: { x: 4, y: 7 } }, action: 'RIGHT', ineffective: true }],
     'data:image/png;base64,AAAA',
     'Recover to a safe checkpoint',
     'Continue through the blocked section.',
@@ -107,7 +108,7 @@ test('Terra Responses request sends image and limits the answer to controller bu
 test('Decisions request uses GPT-6 Luna with image input and a bounded controller choice set', () => {
   const request = decisionsRequest(
     { status: 'GET_STATUS PLAYING game_boy_advance,Emerald', position: { x: 4, y: 7 } },
-    [],
+    [{ observation: { status: 'GET_STATUS PLAYING game_boy_advance,Emerald', position: { x: 4, y: 7 } }, action: 'RIGHT', ineffective: true }],
     'data:image/png;base64,AAAA',
     'Continue to the gym',
     'Never nickname a Pokemon.',
@@ -118,6 +119,7 @@ test('Decisions request uses GPT-6 Luna with image input and a bounded controlle
   assert.equal(request.questions[0].type, 'choice');
   assert.equal(request.questions[0].choices.length, 17);
   assert.match(request.input[0].content[0].text, /trainerName/);
+  assert.match(request.input[0].content[0].text, /"ineffective":true/);
 });
 
 test('Terra recovery limit is checked only during Terra turns', () => {
@@ -155,6 +157,7 @@ test('progress watchdog ignores dialogue-box text changes but detects gameplay s
   const baselinePath = '.local/progress-baseline.png';
   const dialoguePath = '.local/progress-dialogue.png';
   const scenePath = '.local/progress-scene.png';
+  const dialogueTextPath = '.local/progress-dialogue-text.png';
   await base.png().toFile(baselinePath);
   await sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 80, g: 80, b: 80 } } })
     .composite([{ input: { create: { width: 100, height: 25, channels: 3, background: { r: 220, g: 220, b: 220 } } }, top: 75, left: 0 }])
@@ -162,15 +165,21 @@ test('progress watchdog ignores dialogue-box text changes but detects gameplay s
   await sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 80, g: 80, b: 80 } } })
     .composite([{ input: { create: { width: 45, height: 30, channels: 3, background: { r: 220, g: 220, b: 220 } } }, top: 10, left: 10 }])
     .png().toFile(scenePath);
+  await sharp({ create: { width: 100, height: 100, channels: 3, background: { r: 80, g: 80, b: 80 } } })
+    .composite([{ input: { create: { width: 100, height: 32, channels: 3, background: { r: 220, g: 220, b: 220 } } }, top: 68, left: 0 }])
+    .png().toFile(dialogueTextPath);
 
   try {
     const baseline = await screenshotProgressSignal(baselinePath);
     const dialogueOnly = await screenshotProgressSignal(dialoguePath);
     const sceneChanged = await screenshotProgressSignal(scenePath);
+    const baselineAction = await screenshotActionSignal(baselinePath);
+    const dialogueAction = await screenshotActionSignal(dialogueTextPath);
     assert.equal(sameVisibleUi(baseline, dialogueOnly), true);
     assert.equal(sameVisibleUi(baseline, sceneChanged), false);
+    assert.equal(sameVisibleUi(baselineAction, dialogueAction), false);
   } finally {
     const fs = await import('node:fs');
-    for (const file of [baselinePath, dialoguePath, scenePath]) fs.rmSync(file, { force: true });
+    for (const file of [baselinePath, dialoguePath, scenePath, dialogueTextPath]) fs.rmSync(file, { force: true });
   }
 });

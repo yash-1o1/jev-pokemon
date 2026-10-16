@@ -18,7 +18,7 @@ export interface DailyUsage {
 
 export class DailyQuotaReachedError extends Error {
   constructor(readonly usage: DailyUsage) {
-    super(`Daily free-token safety limit reached (${usage.usedTokens.toLocaleString()} / ${DAILY_FREE_TOKEN_LIMIT.toLocaleString()}); stopped before another request could exceed the pool.`);
+    super(`Daily free-token safety reserve reached (${usage.usedTokens.toLocaleString()} / ${DAILY_FREE_TOKEN_LIMIT.toLocaleString()}; ${REQUEST_TOKEN_RESERVE.toLocaleString()} tokens are reserved for the next request); stopped before another request could exceed the pool.`);
     this.name = 'DailyQuotaReachedError';
   }
 }

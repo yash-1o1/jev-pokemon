@@ -13,3 +13,14 @@ export async function screenshotProgressSignal(screenshot: string): Promise<Buff
     .raw()
     .toBuffer();
 }
+
+/** Capture the full screen for interaction inputs, where advancing dialogue or a menu is real UI feedback. */
+export async function screenshotActionSignal(screenshot: string): Promise<Buffer> {
+  const metadata = await sharp(screenshot).metadata();
+  if (!metadata.width || !metadata.height) throw new Error(`Cannot read screenshot dimensions: ${screenshot}`);
+  return sharp(screenshot)
+    .resize({ width: 160, height: Math.max(1, Math.round(metadata.height * 160 / metadata.width)), fit: 'fill' })
+    .greyscale()
+    .raw()
+    .toBuffer();
+}
