@@ -60,6 +60,8 @@ export function actionFailedToProgress(
 
 export const GAME_MODEL = 'gpt-6-luna';
 export const TERRA_MODEL = 'gpt-5.6-terra';
+// GBA text and battle menus remain readable at this width while using fewer vision tokens.
+export const DECISION_IMAGE_WIDTH = 640;
 const ACTIONS = [...BUTTONS, 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT', 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'] as const;
 const TERRA_ACTIONS: readonly Action[] = [...ACTIONS, 'RECOVERY_BATTLE_FINISHED', 'RECOVERY_COMPLETE'];
 const DESCRIPTIONS: Record<Action, string> = {
@@ -205,7 +207,7 @@ export async function chooseAction(
 
   const model: QuotaModel = controller === 'decisions' ? GAME_MODEL : TERRA_MODEL;
   assertDailyBudgetAvailable(model);
-  const image = await sharp(screenshot).resize({ width: 960, kernel: 'nearest' }).png().toBuffer();
+  const image = await sharp(screenshot).resize({ width: DECISION_IMAGE_WIDTH, kernel: 'nearest' }).png().toBuffer();
   const imageUrl = `data:image/png;base64,${image.toString('base64')}`;
   client ??= new OpenAI({ maxRetries: 0 });
   if (controller === 'decisions') {
