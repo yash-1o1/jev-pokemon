@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
+import sharp from 'sharp';
 import { fileURLToPath } from 'node:url';
 import { loadGameChoices, loadProbeConfig } from '../src/platform/config.js';
 import { createDevelopmentProfile, assertDevelopmentProfile, createAchievementProfile, assertAchievementProfile } from '../src/platform/dev-profile.js';
@@ -8,8 +8,8 @@ import { launchRetroArch } from '../src/platform/launch.js';
 import { RetroArchObserver } from '../src/platform/retroarch.js';
 import { pressButton, pressButtons, type Button } from '../src/platform/input.js';
 import { findDevelopmentRetroArch } from '../src/platform/process.js';
-import { observeGame, EMERALD_SAVE_BLOCK_POINTER } from '../src/game/observe.js';
-import { chooseAction, consumeRecoveryAction, GAME_MODEL, recoveryLimitReached, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
+import { observeGame, EMERALD_SAVE_BLOCK_POINTER, type Observation } from '../src/game/observe.js';
+import { actionFailedToProgress, chooseAction, consumeRecoveryAction, GAME_MODEL, recoveryLimitReached, sameGamePosition, TERRA_MODEL, type Action, type Backend, type Controller, type StepRecord } from '../src/decisions/decision.js';
 import { DAILY_FREE_TOKEN_LIMIT, DailyQuotaReachedError, millisecondsUntilUtcReset, readDailyUsage, readTotalDailyUsage, REQUEST_TOKEN_RESERVE } from '../src/decisions/quota.js';
 
 function loadLocalApiKey(): void {
@@ -21,6 +21,18 @@ function loadLocalApiKey(): void {
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 const DECISIONS_STALL_ACTIONS = 6;
 const TERRA_RECOVERY_MAX_ACTIONS = 60;
+
+async function screenshotProgressSignal(screenshot: string): Promise<Buffer> {
+  const metadata = await sharp(screenshot).metadata();
+  if (!metadata.width || !metadata.height) throw new Error(`Cannot read screenshot dimensions: ${screenshot}`);
+  const top = Math.floor(metadata.height * 0.68);
+  return sharp(screenshot)
+    .extract({ left: 0, top, width: metadata.width, height: metadata.height - top })
+    .resize({ width: 160, height: 50, fit: 'fill' })
+    .greyscale()
+    .raw()
+    .toBuffer();
+}
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
   const quotaDate = readDailyUsage().dateUtc;
@@ -175,18 +187,29 @@ async function main(): Promise<void> {
   const startRecovery = backend === 'hybrid' && process.argv.includes('--recover');
   let controller: Controller = backend === 'mock' ? 'mock' : backend === 'responses' ? 'terra' : startRecovery ? 'terra-recovery' : 'decisions';
   let recoveryActionsLeft = startRecovery ? TERRA_RECOVERY_MAX_ACTIONS : 0;
-  let recoveryBattleActive = startRecovery && !process.argv.includes('--recovery-overworld');
+  // Recovery begins from the observed screen. Never assume there is a battle to finish;
+  // if one is already visible, Terra's prompt hands it straight back to Decisions.
+  let recoveryBattleActive = false;
+  let recoveryEpisodeStartPosition: Observation['position'];
+  let failedRecoveryPosition = undefined as typeof recoveryEpisodeStartPosition;
+  let failedRecoveryEpisodes = 0;
   if (startRecovery) console.log(`--recover requested; Terra will continue this recovery episode for up to ${recoveryActionsLeft} actions.`);
-  if (startRecovery && !recoveryBattleActive) console.log('--recovery-overworld requested; the current screen was verified as overworld, so Terra will continue toward the next battle.');
+  if (startRecovery) console.log('Recovery start screen will be inspected directly; Terra will hand back immediately if a battle is already visible.');
   let ineffectiveActionStreak = 0;
   let lastRunRecord: StepRecord | undefined;
-  let lastRunScreenshotHash: string | undefined;
+  let lastRunProgressSignal: Buffer | undefined;
   console.log(`${achievements ? 'Achievement' : 'Development'} session ${attached ? 'attached' : 'started'} on port 55356; controller ${backend === 'hybrid' ? `${GAME_MODEL} primary, ${TERRA_MODEL} stall recovery` : backend === 'responses' ? TERRA_MODEL : 'mock'}; RetroAchievements ${achievements ? 'enabled (hardcore)' : 'disabled'}; PID ${processId}`);
   try {
     for (let step = 0; step < steps; step++) {
       const observation = await observeGame(observer, game, pointerAddress);
       const screenshot = await observer.screenshot(path.join(outputDir, 'screenshots'));
-      const screenshotHash = createHash('sha256').update(fs.readFileSync(screenshot)).digest('hex');
+      const progressSignal = await screenshotProgressSignal(screenshot);
+      if (controller === 'terra-recovery' && !recoveryEpisodeStartPosition)
+        recoveryEpisodeStartPosition = observation.position;
+      if (failedRecoveryPosition && !sameGamePosition(failedRecoveryPosition, observation.position)) {
+        failedRecoveryPosition = undefined;
+        failedRecoveryEpisodes = 0;
+      }
       let stepGoal = goal;
       if (achievements && game === 'emerald') {
         const savedAt = fs.existsSync(lastSaveFile) ? Date.parse(fs.readFileSync(lastSaveFile, 'utf8').trim()) : NaN;
@@ -195,36 +218,67 @@ async function main(): Promise<void> {
           stepGoal += minutes >= 30 ? ` The last confirmed in-game save was ${minutes} minutes ago: save now before further progression.` : ` Last confirmed in-game save was ${minutes} minutes ago; save again by 30 minutes or before any missable event.`;
         } else stepGoal += ' No confirmed in-game save is recorded yet; save as soon as the game allows it.';
       }
+      if (failedRecoveryPosition && sameGamePosition(failedRecoveryPosition, observation.position)) {
+        stepGoal += ` The previous Terra recovery episode used all ${TERRA_RECOVERY_MAX_ACTIONS} actions without reaching a battle at this exact map tile. Terra has already tried one full recovery here (${failedRecoveryEpisodes} unsuccessful episode${failedRecoveryEpisodes === 1 ? '' : 's'}). Review the recent action history and choose a different route or interaction; do not repeat the same A/direction pattern.`;
+      }
       if (backend === 'hybrid' && lastRunRecord) {
         const previous = lastRunRecord;
-        const directional = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT'].includes(previous.action);
-        const oldPos = previous.observation.position;
-        const newPos = observation.position;
-        const stayedPut = directional && oldPos && newPos && oldPos.x === newPos.x && oldPos.y === newPos.y;
-        const advancesState = !['WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'].includes(previous.action);
-        const unchangedScreen = advancesState && lastRunScreenshotHash === screenshotHash;
-        ineffectiveActionStreak = stayedPut || unchangedScreen ? ineffectiveActionStreak + 1 : 0;
+        const ineffective = actionFailedToProgress(
+          previous.action,
+          previous.observation.position,
+          observation.position,
+          lastRunProgressSignal,
+          progressSignal,
+        );
+        ineffectiveActionStreak = ineffective ? ineffectiveActionStreak + 1 : 0;
         if (controller === 'decisions' && ineffectiveActionStreak >= DECISIONS_STALL_ACTIONS) {
           controller = 'terra-recovery';
           recoveryActionsLeft = TERRA_RECOVERY_MAX_ACTIONS;
-          recoveryBattleActive = true;
+          recoveryBattleActive = false;
+          recoveryEpisodeStartPosition = observation.position;
           console.log(`Progress watchdog detected ${ineffectiveActionStreak} ineffective actions; Terra is taking a recovery episode of up to ${TERRA_RECOVERY_MAX_ACTIONS} actions, then will hand back at the next battle.`);
         }
       }
       if (recoveryLimitReached(controller, recoveryActionsLeft)) {
         controller = 'decisions';
         ineffectiveActionStreak = 0;
-        console.log('Terra reached the 60-action recovery limit without reaching the next battle; returning control to Decisions to continue from the current game state. Terra can take over again if the progress watchdog detects another stall.');
+        if (sameGamePosition(recoveryEpisodeStartPosition, observation.position)) {
+          failedRecoveryPosition = observation.position;
+          failedRecoveryEpisodes++;
+          stepGoal += ` The previous Terra recovery episode used all ${TERRA_RECOVERY_MAX_ACTIONS} actions without reaching a battle at this exact map tile. Terra has already tried one full recovery here (${failedRecoveryEpisodes} unsuccessful episode${failedRecoveryEpisodes === 1 ? '' : 's'} at this tile). Review the recent action history and choose a different route or interaction; do not repeat the same A/direction pattern.`;
+          console.log(`Terra reached its ${TERRA_RECOVERY_MAX_ACTIONS}-action limit without reaching a battle or changing map position; returning control to Decisions with an alternate-route warning (${failedRecoveryEpisodes} failed episode${failedRecoveryEpisodes === 1 ? '' : 's'} at this tile).`);
+        } else {
+          failedRecoveryPosition = undefined;
+          failedRecoveryEpisodes = 0;
+          console.log(`Terra reached its ${TERRA_RECOVERY_MAX_ACTIONS}-action limit without reaching the next battle; returning control to Decisions at the current game state.`);
+        }
+        recoveryEpisodeStartPosition = undefined;
       }
       let action: Action;
-      const actionController = controller;
+      let actionController = controller;
       try {
         action = await chooseAction(observation, history, backend, screenshot, stepGoal, instructions, gameChoices, controller, recoveryBattleActive);
       } catch (error) {
-        if (!(error instanceof DailyQuotaReachedError)) throw error;
-        await waitForDailyQuotaReset(observer);
-        step--;
-        continue;
+        if (error instanceof DailyQuotaReachedError) {
+          await waitForDailyQuotaReset(observer);
+          step--;
+          continue;
+        }
+        if (backend !== 'hybrid' || controller !== 'decisions') throw error;
+        console.error(`Decisions request failed (${error instanceof Error ? error.message : String(error)}); handing this turn to Terra for bounded recovery.`);
+        controller = 'terra-recovery';
+        actionController = controller;
+        recoveryActionsLeft = TERRA_RECOVERY_MAX_ACTIONS;
+        recoveryBattleActive = false;
+        recoveryEpisodeStartPosition = observation.position;
+        try {
+          action = await chooseAction(observation, history, backend, screenshot, stepGoal, instructions, gameChoices, controller, recoveryBattleActive);
+        } catch (fallbackError) {
+          if (!(fallbackError instanceof DailyQuotaReachedError)) throw new AggregateError([error, fallbackError], 'Both Decisions and Terra failed to choose an action');
+          await waitForDailyQuotaReset(observer);
+          step--;
+          continue;
+        }
       }
       recoveryActionsLeft = consumeRecoveryAction(actionController, recoveryActionsLeft);
       if (backend === 'hybrid') {
@@ -249,7 +303,7 @@ async function main(): Promise<void> {
       console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
       history.push(record);
       lastRunRecord = record;
-      lastRunScreenshotHash = screenshotHash;
+      lastRunProgressSignal = progressSignal;
       if (action === 'RECOVERY_BATTLE_FINISHED') {
         recoveryBattleActive = false;
         console.log('Terra confirmed the earlier battle ended and the overworld is visible; recovery continues until the next battle.');
@@ -259,6 +313,9 @@ async function main(): Promise<void> {
         controller = 'decisions';
         recoveryActionsLeft = 0;
         ineffectiveActionStreak = 0;
+        recoveryEpisodeStartPosition = undefined;
+        failedRecoveryPosition = undefined;
+        failedRecoveryEpisodes = 0;
         console.log('Terra verified that the next battle has begun; returning gameplay control to Decisions before the battle action.');
         continue;
       }
@@ -296,6 +353,11 @@ async function main(): Promise<void> {
   } catch (error) {
     if (!attached) {
       try { process.kill(processId); } catch { /* Already closed. */ }
+    } else {
+      try {
+        const status = await observer.status();
+        if (status.includes(' PLAYING ')) await observer.togglePause();
+      } catch { /* Keep the original controller error as the primary diagnostic. */ }
     }
     throw error;
   }

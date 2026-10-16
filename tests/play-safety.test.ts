@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { makeDevelopmentConfig, makeAchievementConfig } from '../src/platform/dev-profile.js';
 import { buttonPacket } from '../src/platform/input.js';
-import { answerAction, consumeRecoveryAction, decisionRequest, decisionsRequest, recoveryLimitReached } from '../src/decisions/decision.js';
+import { actionFailedToProgress, answerAction, consumeRecoveryAction, decisionRequest, decisionsRequest, recoveryLimitReached, sameGamePosition, sameVisibleUi } from '../src/decisions/decision.js';
 
 test('development profile disables achievements and clears credentials in repeated settings', () => {
   const source = [
@@ -83,10 +83,10 @@ test('Terra Responses request sends image and limits the answer to controller bu
   );
   assert.ok(recoveryRequest.text.format.schema.properties.action.enum.includes('RECOVERY_COMPLETE'));
   assert.match(recoveryRequest.instructions, /NEXT battle begins/i);
-  assert.match(recoveryRequest.instructions, /Do not fight that next battle as Terra/i);
+  assert.match(recoveryRequest.instructions, /Do not fight a battle as Terra/i);
   assert.ok(recoveryRequest.text.format.schema.properties.action.enum.includes('RECOVERY_BATTLE_FINISHED'));
-  assert.match(recoveryRequest.instructions, /Do not choose RECOVERY_COMPLETE for that encounter/i);
-  assert.match(recoveryRequest.instructions, /choose RECOVERY_BATTLE_FINISHED/i);
+  assert.match(recoveryRequest.instructions, /If the current screenshot is already a battle, choose RECOVERY_COMPLETE immediately/i);
+  assert.match(recoveryRequest.instructions, /Do not fight a battle as Terra/i);
   const recoveryOverworldRequest = decisionRequest(
     { status: 'GET_STATUS PLAYING game_boy_advance,Emerald' },
     [],
@@ -128,4 +128,22 @@ test('Terra recovery allowance counts Terra actions only', () => {
   assert.equal(consumeRecoveryAction('decisions', 60), 60);
   assert.equal(consumeRecoveryAction('terra-recovery', 60), 59);
   assert.equal(consumeRecoveryAction('terra-recovery', 0), 0);
+});
+
+test('stall detection catches repeated interactions despite sprite animation and ignores visible dialogue progress', () => {
+  const position = { x: 2, y: 8, mapGroup: 11, mapNum: 3 };
+  const stableDialogue = Buffer.alloc(160, 90);
+  const animatedScene = Buffer.from(stableDialogue);
+  animatedScene[0] = 110; // Small animation noise is below the visible-change threshold.
+  assert.equal(sameGamePosition(position, { ...position }), true);
+  assert.equal(sameVisibleUi(stableDialogue, animatedScene), true);
+  assert.equal(actionFailedToProgress('A', position, position, stableDialogue, animatedScene), true);
+
+  const nextDialogue = Buffer.from(stableDialogue);
+  nextDialogue.fill(190, 80, 120);
+  assert.equal(sameVisibleUi(stableDialogue, nextDialogue), false);
+  assert.equal(actionFailedToProgress('A', position, position, stableDialogue, nextDialogue), false);
+  assert.equal(actionFailedToProgress('DOWN', position, position, stableDialogue, nextDialogue), true);
+  assert.equal(actionFailedToProgress('DOWN', position, { ...position, y: 9 }, stableDialogue, stableDialogue), false);
+  assert.equal(actionFailedToProgress('WAIT', position, position, stableDialogue, stableDialogue), false);
 });

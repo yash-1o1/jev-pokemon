@@ -20,6 +20,41 @@ export function consumeRecoveryAction(controller: Controller, actionsLeft: numbe
   return controller === 'terra-recovery' ? Math.max(0, actionsLeft - 1) : actionsLeft;
 }
 
+export interface GamePosition {
+  x: number;
+  y: number;
+  mapGroup?: number;
+  mapNum?: number;
+}
+
+export function sameGamePosition(previous: GamePosition | undefined, current: GamePosition | undefined): boolean {
+  return !!previous && !!current && previous.x === current.x && previous.y === current.y &&
+    previous.mapGroup === current.mapGroup && previous.mapNum === current.mapNum;
+}
+
+/** Compare a stable, downsampled UI region while allowing tiny animation noise. */
+export function sameVisibleUi(previous: Uint8Array | undefined, current: Uint8Array | undefined): boolean {
+  if (!previous || !current || previous.length !== current.length || previous.length === 0) return false;
+  let changedPixels = 0;
+  for (let index = 0; index < previous.length; index++) {
+    if (Math.abs(previous[index] - current[index]) > 28) changedPixels++;
+  }
+  return changedPixels / previous.length <= 0.015;
+}
+
+export function actionFailedToProgress(
+  action: Action,
+  previousPosition: GamePosition | undefined,
+  currentPosition: GamePosition | undefined,
+  previousUi: Uint8Array | undefined,
+  currentUi: Uint8Array | undefined,
+): boolean {
+  if (action === 'WAIT' || action === 'SAVE_CONFIRMED' || action === 'NEED_USER_INPUT') return false;
+  const directional = ['UP', 'DOWN', 'LEFT', 'RIGHT', 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT'].includes(action);
+  if (directional && previousPosition && currentPosition) return sameGamePosition(previousPosition, currentPosition);
+  return sameVisibleUi(previousUi, currentUi);
+}
+
 export const GAME_MODEL = 'gpt-6-luna';
 export const TERRA_MODEL = 'gpt-5.6-terra';
 const ACTIONS = [...BUTTONS, 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT', 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'] as const;
@@ -70,7 +105,7 @@ export function decisionRequest(
   const actionGuide = allowedActions.map(action => `${action}: ${DESCRIPTIONS[action]}`).join('\n');
   return {
     model: TERRA_MODEL,
-    instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. For recent directional actions, compare position with nextPosition. If the screenshot shows the player turned but still in place, repeat that direction once to move; after the repeat, try a different direction if the position remains unchanged. Return one action from this list:\n${actionGuide}\nChoose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.${recovery ? ` Recovery handoff policy: Terra temporarily takes over only because Decisions has stalled. ${recoveryBattleActive ? 'A battle may have been in progress when this recovery episode began. Do not choose RECOVERY_COMPLETE for that encounter. Finish it safely. Only once the battle has visibly ended and the overworld is clearly displayed, choose RECOVERY_BATTLE_FINISHED without pressing a button. Then continue safely through the overworld until a later, NEXT battle begins.' : 'Continue safely through the overworld until the NEXT battle begins.'} As soon as that next battle intro or its first battle command menu is clearly visible, choose RECOVERY_COMPLETE immediately and press no button; Decisions will take over at that battle. Do not fight that next battle as Terra. Do not choose RECOVERY_COMPLETE in the overworld, in the encounter that was active at recovery start, or on an unclear screen. If progress requires an irreversible or missable choice that cannot be verified, choose NEED_USER_INPUT.` : ''}`,
+    instructions: `${baseInstructions.trim()}\n\nChoose one short gamepad action toward the goal provided in the input. For recent directional actions, compare position with nextPosition. If the screenshot shows the player turned but still in place, repeat that direction once to move; after the repeat, try a different direction if the position remains unchanged. Do not repeat A or another interaction when the dialogue/menu has not visibly changed; after two presses without a visible change, choose a different approach. Do not repeat a direction more than twice when the map position remains unchanged. Return one action from this list:\n${actionGuide}\nChoose SAVE_CONFIRMED only when the screenshot visibly confirms an in-game save. Choose NEED_USER_INPUT when a required choice is missing or a missable checkpoint cannot be verified.${recovery ? ` Recovery handoff policy: Terra temporarily takes over only because Decisions has stalled. ${recoveryBattleActive ? 'A battle may have been in progress when recovery started. If the current screenshot is already a battle, choose RECOVERY_COMPLETE immediately without pressing a button so Decisions takes it over. Otherwise continue safely through the overworld until the NEXT battle begins.' : 'Continue safely through the overworld until the NEXT battle begins.'} As soon as a battle intro or its first battle command menu is clearly visible, choose RECOVERY_COMPLETE immediately and press no button; Decisions will take over at that battle. Do not fight a battle as Terra. If progress requires an irreversible or missable choice that cannot be verified, choose NEED_USER_INPUT.` : ''}`,
     input: [{
       role: 'user' as const,
       content: [
