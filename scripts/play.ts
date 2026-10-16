@@ -23,7 +23,8 @@ const DECISIONS_STALL_ACTIONS = 6;
 const TERRA_RECOVERY_MAX_ACTIONS = 60;
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
-  const quotaDate = readDailyUsage().dateUtc;
+  const total = readTotalDailyUsage();
+  const quotaDate = total.dateUtc;
   const pauseMarker = path.resolve('.local/ra-run/quota-paused-utc-date.txt');
   const before = await observer.status();
   const markedDate = fs.existsSync(pauseMarker) ? fs.readFileSync(pauseMarker, 'utf8').trim() : '';
@@ -35,7 +36,7 @@ async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void
     fs.writeFileSync(pauseMarker, quotaDate + '\n');
   }
   const resetAt = new Date(Date.now() + millisecondsUntilUtcReset());
-  console.log(`Daily free-token safety limit reached. RetroArch is ${resumePausedGame ? 'paused for the cap' : 'left in its current state'}; waiting until ${resetAt.toISOString()} UTC before continuing.`);
+  console.log(`Shared-token request reserve reached (${total.usedTokens.toLocaleString()} / ${DAILY_FREE_TOKEN_LIMIT.toLocaleString()} used; keeping ${REQUEST_TOKEN_RESERVE.toLocaleString()} tokens available for the next request). RetroArch is ${resumePausedGame ? 'paused for the reserve' : 'left in its current state'}; waiting until ${resetAt.toISOString()} UTC before continuing.`);
   while (new Date().toISOString().slice(0, 10) === quotaDate) {
     await sleep(Math.min(60_000, millisecondsUntilUtcReset()));
   }
