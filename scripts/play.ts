@@ -20,7 +20,9 @@ function loadLocalApiKey(): void {
 
 const sleep = (milliseconds: number) => new Promise(resolve => setTimeout(resolve, milliseconds));
 const DECISIONS_STALL_ACTIONS = 6;
+const TERRA_STALL_ACTIONS = 3;
 const TERRA_RECOVERY_MAX_ACTIONS = 60;
+const MAX_CONSECUTIVE_WAITS = 1;
 
 async function waitForDailyQuotaReset(observer: RetroArchObserver): Promise<void> {
   const total = readTotalDailyUsage();
@@ -185,6 +187,8 @@ async function main(): Promise<void> {
   if (startRecovery) console.log(`--recover requested; Terra will continue this recovery episode for up to ${recoveryActionsLeft} actions.`);
   if (startRecovery) console.log('Recovery start screen will be inspected directly; Terra will hand back immediately if a battle is already visible.');
   let ineffectiveActionStreak = 0;
+  let consecutiveWaits = 0;
+  let reviewRetriesAtPosition = 0;
   let lastRunRecord: StepRecord | undefined;
   let lastRunActionSignal: Buffer | undefined;
   console.log(`${achievements ? 'Achievement' : 'Development'} session ${attached ? 'attached' : 'started'} on port 55356; controller ${backend === 'hybrid' ? `${GAME_MODEL} primary, ${TERRA_MODEL} stall recovery` : backend === 'responses' ? TERRA_MODEL : 'mock'}; RetroAchievements ${achievements ? 'enabled (hardcore)' : 'disabled'}; PID ${processId}`);
@@ -227,6 +231,14 @@ async function main(): Promise<void> {
           recoveryBattleActive = false;
           recoveryEpisodeStartPosition = observation.position;
           console.log(`Progress watchdog detected ${ineffectiveActionStreak} ineffective actions; Terra is taking a recovery episode of up to ${TERRA_RECOVERY_MAX_ACTIONS} actions, then will hand back at the next battle.`);
+        } else if (controller === 'terra-recovery' && ineffectiveActionStreak >= TERRA_STALL_ACTIONS) {
+          controller = 'decisions';
+          recoveryActionsLeft = 0;
+          recoveryBattleActive = false;
+          recoveryEpisodeStartPosition = undefined;
+          stepGoal += ` Terra repeated ${ineffectiveActionStreak} ineffective actions. Reassess the current screenshot and position, then choose a different safe route or interaction; do not repeat the failed pattern.`;
+          ineffectiveActionStreak = 0;
+          console.log(`Terra made no visible progress for ${TERRA_STALL_ACTIONS} actions; returning control to Decisions before its 60-action cap.`);
         }
       }
       if (recoveryLimitReached(controller, recoveryActionsLeft)) {
@@ -288,6 +300,28 @@ async function main(): Promise<void> {
         console.log('Ignored stale battle-finished marker; no opening battle was active at recovery start.');
         action = 'WAIT';
       }
+      if (action === 'WAIT') {
+        consecutiveWaits++;
+        if (consecutiveWaits > MAX_CONSECUTIVE_WAITS) {
+          if (backend === 'hybrid' && controller === 'decisions') {
+            controller = 'terra-recovery';
+            recoveryActionsLeft = TERRA_RECOVERY_MAX_ACTIONS;
+            recoveryBattleActive = false;
+            recoveryEpisodeStartPosition = observation.position;
+          } else if (backend === 'hybrid' && controller === 'terra-recovery') {
+            controller = 'decisions';
+            recoveryActionsLeft = 0;
+            recoveryEpisodeStartPosition = undefined;
+          }
+          consecutiveWaits = 0;
+          step--;
+          console.log('Model repeated WAIT without a state change; switching controller and requesting a fresh action without advancing the game.');
+          continue;
+        }
+      } else {
+        consecutiveWaits = 0;
+        reviewRetriesAtPosition = 0;
+      }
       const record: StepRecord = { observation, action };
       fs.appendFileSync(logFile, JSON.stringify({ step: step + 1, at: new Date().toISOString(), screenshot, ...record }) + '\n');
       console.log(JSON.stringify({ step: step + 1, action, screenshot, position: observation.position ?? null, positionError: observation.positionError ?? null }));
@@ -310,10 +344,24 @@ async function main(): Promise<void> {
         continue;
       }
       if (action === 'NEED_USER_INPUT') {
+        reviewRetriesAtPosition++;
+        if (reviewRetriesAtPosition <= 3 && backend === 'hybrid') {
+          const status = await observer.status();
+          if (status.includes(' PAUSED ')) await observer.togglePause();
+          const nextController = controller === 'decisions' ? 'terra-recovery' : 'decisions';
+          controller = nextController;
+          recoveryActionsLeft = nextController === 'terra-recovery' ? TERRA_RECOVERY_MAX_ACTIONS : 0;
+          recoveryBattleActive = false;
+          recoveryEpisodeStartPosition = nextController === 'terra-recovery' ? observation.position : undefined;
+          stepGoal += ' A prior controller asked for review. Inspect the screenshot, checkpoint, and recent actions; take the safest reversible action that advances or clarifies the current state. Do not repeat WAIT. Request user input only if you can name the specific missing fact or unsafe one-time decision.';
+          console.log(`Non-specific review request; handing the same state to ${nextController} for a fresh assessment (${reviewRetriesAtPosition}/3).`);
+          step--;
+          continue;
+        }
         const status = await observer.status();
         if (status.includes(' PLAYING ')) await observer.togglePause();
-        console.log(`Review needed at ${screenshot}. Check gameChoices in ${path.resolve(configFile)} or the current missable checkpoint, then rerun play to continue this session.`);
-        return;
+        console.log(`Safety review needed at ${screenshot}. RetroArch is paused; the runner remains alive and will re-check this state after 60 seconds. Name the unresolved personal choice or missable checkpoint before continuing.`);
+        while (true) await sleep(60_000);
       }
       if (action === 'SAVE_CONFIRMED') {
         if (achievements && game === 'emerald') {

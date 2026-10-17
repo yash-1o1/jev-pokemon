@@ -64,6 +64,9 @@ export const TERRA_MODEL = 'gpt-5.6-terra';
 export const DECISION_IMAGE_WIDTH = 640;
 const ACTIONS = [...BUTTONS, 'RUN_UP', 'RUN_DOWN', 'RUN_LEFT', 'RUN_RIGHT', 'WAIT', 'SAVE_CONFIRMED', 'NEED_USER_INPUT'] as const;
 const TERRA_ACTIONS: readonly Action[] = [...ACTIONS, 'RECOVERY_BATTLE_FINISHED', 'RECOVERY_COMPLETE'];
+// Bound a hung API request so the hybrid runner can hand a stalled Decisions
+// turn to Terra instead of appearing alive while making no progress.
+export const MODEL_REQUEST_TIMEOUT_MS = 90_000;
 const DESCRIPTIONS: Record<Action, string> = {
   UP: 'Move up', DOWN: 'Move down', LEFT: 'Move left', RIGHT: 'Move right',
   A: 'Confirm or interact', B: 'Cancel or go back',
@@ -209,7 +212,7 @@ export async function chooseAction(
   assertDailyBudgetAvailable(model);
   const image = await sharp(screenshot).resize({ width: DECISION_IMAGE_WIDTH, kernel: 'nearest' }).png().toBuffer();
   const imageUrl = `data:image/png;base64,${image.toString('base64')}`;
-  client ??= new OpenAI({ maxRetries: 0 });
+  client ??= new OpenAI({ maxRetries: 0, timeout: MODEL_REQUEST_TIMEOUT_MS });
   if (controller === 'decisions') {
     const result = await client.decisions.create(decisionsRequest(observation, history, imageUrl, goal, baseInstructions, gameChoices));
     const usedTokens = result.usage?.total_tokens;
